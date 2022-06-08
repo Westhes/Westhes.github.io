@@ -2,7 +2,7 @@ title = "Westhes"
 baseURL = "https://Westhes.github.io/Westhes/"
 copyright = "Sebastiaan Westheim"
 languageCode = "en-us"
-theme = "ananke"
+theme = "Ananke"
 resourceDir = "../resources"
 canonifyurls = true
 
