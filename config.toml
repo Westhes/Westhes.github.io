@@ -1,5 +1,5 @@
 title = "Westhes"
-baseURL = "https://Westhes.github.io/Westhes/"
+baseURL = "https://westhes.github.io/"
 copyright = "Sebastiaan Westheim"
 languageCode = "en-us"
 theme = "Ananke"
