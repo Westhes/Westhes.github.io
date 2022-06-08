@@ -8,6 +8,6 @@ cascade:
   featured_image: '/images/alvaro-felipe-7G6IS_arLLg-unsplash.jpg'
 ---
 
-Welcome to my portfolio with some of my work.  
+Welcome to my portfolio website with some of my work.  
 Over the years I've been working on a variety of projects.   
 You can read about some of them in the articles below.  
