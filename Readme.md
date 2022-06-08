@@ -1,11 +1,9 @@
 # Debug
-In order to debug and develop write: `.\hugo.exe server`
-
+In order to launch the server run: `.\hugo.exe server`
 
 # Image source:
 https://unsplash.com/
 
 # Uploading:
-https://youtu.be/mEZ1Hj5yQ-8?t=2307
-
-`.\hugo.exe -D`
+In order to create the actual website run: `.\hugo.exe -D`\
+The public directory will then contain all the files.
