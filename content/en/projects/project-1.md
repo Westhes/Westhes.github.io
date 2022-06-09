@@ -23,12 +23,12 @@ Based off this knowledge I created the following dataset.
 
 {{< remoteImage src=`https://i.imgur.com/RpwlNBw.jpg` style=`width:100%;`>}}
 This dataset consisted of a 5x5x5 matrix in which 3 diagonal neighboring cells were transparent, and the rest were solid.
-This allowed me to efficiently test against a variety of challenges:
+This allowed me to efficiently work on a variety of challenges:
 1. Duplicate vertices.
 2. Frontface culling.
 3. Different Block types
 
-Throughout the week that I had worked on this, I also tackled and implemented other challenges such as controlled randomness in the form of perlin noise and chunks. Which is the reason how I managed to create this already spectacular looking terrain.
+Throughout the week that I had worked on this, I also tackled and implemented other challenges such as controlled randomness in the form of perlin noise and chunks. Which is how I managed to create this already spectacular looking terrain.
 
 {{< remoteVideo src=`https://i.imgur.com/iw4fiiW.mp4` autoplay=`false` style=`width:100%;` >}}
 {{< href url=`https://github.com/Westhes/Procedural-Terrain-Generation` text=`Github - Procedural Terrain Generation`>}}
