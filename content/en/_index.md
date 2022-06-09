@@ -8,6 +8,7 @@ cascade:
   featured_image: 'https://i.imgur.com/GPm2nUZ.jpeg'
 ---
 
-Welcome to my portfolio website with some of my work.  
-Over the years I've been working on a variety of projects.   
-You can read about some of them in the articles below.  
+Welcome to my portfolio website.  
+On here you can find projects I have worked on over the years.
+You can read about some of them in the articles below.
+In there I give a showcase of what I've made, explain how things came to be, what challenges were tackled and more.  

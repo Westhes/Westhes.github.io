@@ -12,7 +12,7 @@ Inspired by it's grand and amazing worlds I wanted to create something like it f
 During one of my courses at Amsterdam University of Applied Sciences (AUAS) we were tasked to create a procedurally generated object. While this was only meant to be a simple object, I quickly became invested in this technology.
 
 What started off as a simple line between two points, grew into a triangle and from there the possibilities seemed endless.
-{{< remoteVideo src=`https://i.imgur.com/BMAqco3.mp4` autoplay=`false` style=`width:100%;` >}}
+{{< remoteVideo src=`https://i.imgur.com/BMAqco3.mp4` style=`width:100%;` >}}
 {{< href url=`https://github.com/Westhes/Procedural-Mesh-Generation` text=`Github - Procedural Mesh Generation`>}}
 
 Motivated by the initial triangle I wanted to start working on a full fledged terrain generator.
@@ -30,7 +30,7 @@ This allowed me to efficiently work on a variety of challenges:
 
 Throughout the week that I had worked on this, I also tackled and implemented other challenges such as controlled randomness in the form of perlin noise and chunks. Which is how I managed to create this already spectacular looking terrain.
 
-{{< remoteVideo src=`https://i.imgur.com/iw4fiiW.mp4` autoplay=`false` style=`width:100%;` >}}
+{{< remoteVideo src=`https://i.imgur.com/iw4fiiW.mp4` style=`width:100%;` >}}
 {{< href url=`https://github.com/Westhes/Procedural-Terrain-Generation` text=`Github - Procedural Terrain Generation`>}}
 
 And that's where the project is left at, it's not finished. A terrain generator like this can always be expanded upon and always be improved upon. But for the week I spend on this, I accomplished and overcame quite a lot of technical challenges.
