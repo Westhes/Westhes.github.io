@@ -9,7 +9,7 @@ menu:
 {{< figure src="/images/me.jpg" title="Sebastiaan Westheim" >}}
 
 ### About
-A enthioustic programmer, who first started programming in 2012.\
+An enthioustic programmer, who first started programming in 2012.\
 I'm a strong believer that every day is a chance to improve yourself.\
 I love exploring new technologies, researching, and watching game developer conferences / dev-vlogs.
 My main programming skillset comes from C#, but over the years I've worked with tons of different languages ranging from unknown ones such as MAXScript, to well known ones, such as python, and everything in between.
