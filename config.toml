@@ -28,6 +28,13 @@ enableRobotsTXT = true
   priority = 0.5
   filename = "sitemap.xml"
 
+[taxonomies]
+  category = 'categories'
+  programming = 'programming'
+  procedural-generation = 'procedural-generation'
+  pathfinding = 'pathfinding'
+  tag = 'tags'
+
 [params]
   text_color = ""
   author = "Sebastiaan Westheim"
