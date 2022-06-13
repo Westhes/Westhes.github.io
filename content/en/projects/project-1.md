@@ -2,7 +2,7 @@
 date: 2022-05-25T09:48:59-04:00 
 description: "A project that started as a triangle, and ended as a world"
 featured_image: "https://i.imgur.com/jNQktl3.jpg"
-tags: ["Programming"]
+tags: ["Programming", "Procedural Generation"]
 title: "Procedural terrain generation"
 show_reading_time: true
 ---
