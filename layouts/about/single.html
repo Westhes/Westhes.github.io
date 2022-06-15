@@ -1,0 +1,36 @@
+{{ define "header" }}{{ partial "page-header.html" . }}{{ end }}
+{{ define "main" }}
+
+{{ $about_text := "" }}
+{{ with .Params.about_text }}
+	{{ $about_text = . }}
+{{ end }}
+
+{{ $about_image := ""}}
+{{ with .Params.about_image }}
+  {{ $about_image = . }}
+{{ end }}
+
+  <div class="flex-l mt2 mw8 center flex-column">
+    {{ if $about_text }}
+    <header class="flex flex-row-ns flex-column-reverse ph3 pt6">
+      <div class="w-100 w-60-ns p13-ns pr5-ns">
+        <h1 class="f1">{{ .Title }}</h1>
+        <p class="nested-copy-line-height lh-copy f4 nested-links {{ $.Param "text_color" | default "mid-gray" }}">
+          {{ $about_text }}
+        </p>
+      </div>
+      <div class="m0-ns w-100 w-40-ns flex items-center">
+        <img class="br4" src="{{ $about_image }}">
+      </div>
+    </header>
+    {{ end }}
+    <article class="center cf pv5 ph3 ph4-ns mw7">
+      <header>
+      </header>
+      <div class="nested-copy-line-height lh-copy f4 nested-links {{ $.Param "text_color" | default "mid-gray" }}">
+        {{ .Content }}
+      </div>
+    </article>
+  </div>
+{{ end }}

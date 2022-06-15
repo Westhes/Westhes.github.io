@@ -5,21 +5,20 @@ featured_image: ''
 menu:
   main:
     weight: 2
----
-{{< figure src="/images/me.jpg" title="Sebastiaan Westheim" >}}
-
-### About
-An enthioustic programmer, who first started programming in 2012.\
+type: about
+about_text: "An enthioustic programmer, who first started programming in 2012.\
 I'm a strong believer that every day is a chance to improve yourself.\
 I love exploring new technologies, researching, and watching game developer conferences / dev-vlogs.
 My main programming skillset comes from C#, but over the years I've worked with tons of different languages ranging from unknown ones such as MAXScript, to well known ones, such as python, and everything in between.
 I'm not afraid of trying something new, and am always down for a challenge.
-When I'm not coding I'm either playing games, hanging out with friends or in the gym working out.
+When I'm not coding I'm either playing games, hanging out with friends or in the gym working out."
+about_image: "/images/me.jpg"
+---
 
 ### Background
 
 Back in 2011 a younger me pondered about his future, wondering what he would do after finishing college.
-At the time I had yet to know that a path of game-development and software-engineering lied ahead of me. 
+At the time I had yet to know that a path of game-development and software-engineering lay ahead of me. 
 
 In 2012 I made my first steps towards becoming a game-developer by studying game development at the Grafisch lyceum Rotterdam. Over the course of 4 years this would be my introduction to programming, modeling, and various other software skills. The last half year I had closed off as intern at an animation company in Alkmaar.
 Content with my performance they offered me a contract for a year, which they had later offered to renew, but I declined.
