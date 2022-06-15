@@ -1,7 +1,7 @@
 ---
 date: 2022-05-25T09:48:59-04:00 
 description: "A project that started as a triangle, and ended as a world"
-featured_image: "https://i.imgur.com/jNQktl3.jpg"
+featured_image: "https://i.imgur.com/jNQktl3.webp"
 tags: ["Programming", "Procedural Generation"]
 title: "Procedural terrain generation"
 show_reading_time: true
@@ -21,7 +21,7 @@ Hence why I early on already realized that in order to draw blocks, I shouldn't 
 
 Based off this knowledge I created the following dataset.
 
-{{< remoteImage src=`https://i.imgur.com/RpwlNBw.jpg` style=`width:100%;`>}}
+{{< remoteImage src=`https://i.imgur.com/RpwlNBw.webp` style=`width:100%;`>}}
 This dataset consisted of a 5x5x5 matrix in which 3 diagonal neighboring cells were transparent, and the rest were solid.
 This allowed me to efficiently work on a variety of challenges:
 1. Duplicate vertices.

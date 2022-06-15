@@ -1,0 +1,19 @@
+{{/* 
+	GetFeaturedVideo
+
+	This partial gets the url for featured video for a given page.
+
+	@return RelPermalink to featured image, or an empty string if not found.
+
+*/}}
+
+{{/* Declare a new string variable, $linkToVideo */}}
+{{ $linkToVideo := "" }}
+{{/* Use the value from front matter if present */}}
+{{ with .Params.featured_video }}
+	{{ $linkToVideo = . }}
+{{ end }}
+
+{{/* return either a permalink, or an empty string. Note that partials can only have a single
+return statement, so this needs to be at the end of the partial (and not in the if block) */}}
+{{ return $linkToVideo }}
