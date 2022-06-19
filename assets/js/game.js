@@ -109,8 +109,8 @@ class Game {
     input(i) {
         let keyCode = i.keyCode;
         switch (keyCode) {
-            // ESC - Play/Pause game
-            case 27:
+            case 27: // 'ESC'ape
+            case 80: // 'P'
                 this.stop = !this.stop;
                 console.log("Is Playing = ", !this.stop);
                 if (this.stop === false) {
@@ -284,45 +284,114 @@ class Terrain
     }
     
     static Lerp(p0, p1, t) { return p0 + (p1 - p0) * t; }
+
+    static Unlerp(p0, p1, t) { return (t - p0) / (p1 - p0); }
 }
 
 class Player {
-    constructor(terrain) {
-        this.x = 15;
-        this.y = 10;
-        this.velocityX = 0;
-        this.velocityY = 0;
-        this.terrain = terrain;
-        this.isGrounded = false;
+    constructor(terrain, usePhysics) {
+        this.usePhysics = usePhysics;
+        if (usePhysics)
+        {
+            this.x = 15;
+            this.y = 10;
+            this.ix = 15;
+            this.iy = 10;
+            this.velocityX = 0;
+            this.velocityY = 0;
+            this.terrain = terrain;
+            this.isGrounded = false;
+
+            this.lastFixedUpdate = 0;
+            this.expectedNextFixedUpdate = 0;
+            this.fixedDeltaTime = 0;
+            this.waitingCount = 0;
+
+        }
+        else {
+            this.x = 15;
+            this.y = 40;
+        }
+        
+        //window.addEventListener('keydown', this.input.bind(this), false);
     }
 
     update(deltaTime) {
+        if (this.usePhysics) {
+            // Get the time between previous and now
+            let t = Terrain.Unlerp(this.lastFixedUpdate, this.expectedNextFixedUpdate, performance.now());
+            // if (t >= 1) {
+            //     // Don't do anything
+            //     this.waitingCount++;
+            //     //console.log("Stalling..");
+            //     // this.ix = this.x = this.x + this.velocityX * this.fixedDeltaTime;
+            //     // this.iy = this.y = this.y + this.velocityY * this.fixedDeltaTime;
+            // }
+            // else {
+                // if (this.waitingCount >= 0) console.log("Waited", this.waitingCount, "updates..");
+                this.ix = Terrain.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
+                this.iy = Terrain.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
+
+                // this.waitingCount = 0;
+            // }
+            // console.log(t);
+            // console.log(this.iy);
+        }
     }
     
     fixedUpdate(fixedDeltaTime) {
-        if (!this.isGrounded) this.velocityY += 9.81 * fixedDeltaTime;
-        //let groundHeight = this.terrain.
-
-
-        this.x += this.velocityX;
-        this.y += this.velocityY;
+        if (this.usePhysics) {
+            let now = performance.now();
+            let t = Terrain.Unlerp(this.lastFixedUpdate, this.expectedNextFixedUpdate, now);
+            
+            this.lastFixedUpdate = now;
+            let fixedFrameRate = 1/ fixedDeltaTime;
+            this.expectedNextFixedUpdate = this.lastFixedUpdate + fixedFrameRate;
+            this.fixedDeltaTime = fixedDeltaTime;
+            
+            if (!isNaN(t) && isFinite(t))
+            {
+                this.ix = this.x = Terrain.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
+                this.iy = this.y = Terrain.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
+            }
+            this.velocityX = 200;
+        }
     }
 
     render(ctx) {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
-        ctx.fill();
+        if (this.usePhysics)
+        {
+            ctx.beginPath();
+            ctx.arc(this.ix, this.iy, 10, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        else {
+            this.x += 8;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     onCanvasResize(width, height) {}
+
+    input(key) {
+        const keyCode = key.keyCode;
+        switch(keyCode) {
+            case 83: // 'S' pressed
+                this.velocityY = 2;
+                break;
+        }
+    }
 }
 
 function startGame() {
-    const game = new Game(60, 20);
+    const game = new Game(144, 20);
     const terrain = new Terrain();
     game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
-    game.addGameobject(new Player(terrain));
+    game.addGameobject(new Player(terrain, true));
+    game.addGameobject(new Player(terrain, false));
 }
 
 startGame();
