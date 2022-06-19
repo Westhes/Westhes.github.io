@@ -26,7 +26,7 @@ class Game {
         // Get the right update method.
         this.updateMethod = Game.GetUpdateMethod();
         // Handle rescaling
-        new ResizeObserver(this.onWindowResize).observe(document.body);
+        new ResizeObserver(this.onWindowResize.bind(this)).observe(document.body);
         // this.startLoop();
         window.addEventListener('keydown', this.input.bind(this), false);
         this.startLoop();
@@ -79,9 +79,9 @@ class Game {
     onWindowResize() {
         // Handle resize logic here
         //console.log(document.body.clientWidth, document.body.clientHeight);
-        // this.gameObjects.forEach(gameObject => {
-        //     this.gameObject.onCanvasResize();
-        // })
+        this.gameObjects.forEach(gameObject => {
+            gameObject.onCanvasResize(this.width, this.height);
+        })
     }
 
     update(deltaTime) {
@@ -97,12 +97,12 @@ class Game {
     }
 
     render() {
+        this.stop = true;
+        
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.gameObjects.forEach(gameObject => {
             gameObject.render(this.context);
         });
-
-        this.stop = true;
     }
 
     input(i) {
@@ -182,126 +182,110 @@ class Test
 
 class Terrain
 {
+    static MinWaveWidth = 100;
+    static MaxWaveWidth = 300;
+    static MinWaveHeight = 100;
+    static MaxWaveHeight = 200;
     constructor() {
         this.x = 0;
         this.y = 150;
         this.length = Math.PI*2;
         this.step = 1;
         this.canvasWidth = 0;
-        this.canvasHeight = 0
+        this.canvasHeight = 0;
 
         this.waves = [];
-
-        for (let index = 0; index < 20; index++) {
-            const prev = this.waves[index-1];
-            const isInverse = index % 2 == 0;
-            let offset = prev.offset + prev.minima;
-            let a = Math.random() * 4;
-            let b = Math.random() * 5;
-            if (index == 0)
-            {
-                //const isInverse = index % 2 == 0;
-                let offset = 0;
-                let a = 1.2;
-                let b = 2.2;
-                let minima = Terrain.FindLocalMinima(a, b);
-                let max = Terrain.getHeight(0, a, b);
-                let min = Terrain.getHeight(minima, a, b);
-                this.waves.push({
-                    offset,
-                    a,
-                    b,
-                    minima,
-                    min,
-                    max,
-                });
-                continue;
-            }
-            // let prev = this.waves[index-1];
-            // console.log(prev, this.waves[index-1].offset, this.waves[index-1].minima);
-            
-            let minima = Terrain.FindLocalMinima(a,b);
-            let max = Terrain.getHeight(0, a, b);
-            let min = Terrain.getHeight(minima, a, b);
-
-            this.waves.push({
-                offset,
-                a,
-                b,
-                minima,
-                isInverse,
-                min,
-                max,
-            })
-        }
-        console.log(this.waves); 
-        
-        // this.lengthMultiplierA = 1.2;
-        // this.lengthMultiplierB = 2.2;
-        // this.waveMinima = Terrain.FindLocalMinima(this.lengthMultiplierA, this.lengthMultiplierB);
-        // console.log(this.waveMinima);
-        // this.waveHeightMultiplier =50.0;
+        this.furthestX = 0;
     }
 
     update(deltaTime) {}
     fixedUpdate(fixedDeltaTime){}
     render(ctx) {
         ctx.beginPath();
-        // Start from bottom left
         ctx.moveTo(0, this.canvasHeight);
-        for (let index = 0; index < this.waves.length; index++) {
-            const element = this.waves[index];
+        // console.log("Hello", this.waves);
+        for (let i = 0; i < this.waves.length; i++) {
+            const element = this.waves[i];
+            const isCurve = (i % 2 === 0);
+            if (isCurve) {
+                for (let x = element.x0; x < element.x1; x++) {
+                    ctx.lineTo(x, Terrain.Lerp(element.y0, element.y1, Terrain.SmoothStep(element.x0, element.x1, x)));
+                }
+            }
+            else {
+                ctx.lineTo(element.x1, element.y1);
+            }
             
-            for (let xPos = element.offset * 10; xPos <= element.offset * 10 + element.minima * 10; xPos += this.step) { // Change this back to this.length.
-                ctx.lineTo(xPos * 10, this.canvasHeight - this.y - Terrain.getHeight(xPos / 10, element.a, element.b) * 20);
-            } 
         }
+        
+        //ctx.lineTo(this.canvasWidth, 0);
+        console.log(this);
         ctx.lineTo(this.canvasWidth, this.canvasHeight);
-        // for (let xPos = 0; xPos <= this.waveMinima * 10; xPos += this.step) { // Change this back to this.length.
-        //     ctx.lineTo(xPos * 10, this.canvasHeight - this.y - Terrain.getHeight(xPos / 10, this.lengthMultiplierA, this.lengthMultiplierB) * 20);
-        // }
-        //ctx.lineTo(this.canvasWidth, this.canvasHeight);
-        console.log(this.length);
-        // ctx.moveTo(65, 65);
-        // ctx.arc(60, 65, 5, 0, Math.PI * 2, true);  // Left eye
-        // ctx.moveTo(95, 65);
-        // ctx.arc(90, 65, 5, 0, Math.PI * 2, true);  // Right eye
         ctx.fill();
     }
+
     onCanvasResize(width, height) {
         this.canvasWidth = width;
         this.canvasHeight = height;
+        this.expandWaves();
     }
 
-    static getHeight(xPos, waveLengthMultiplierA, waveLengthMultiplierB) {
-        return Math.cos(xPos * waveLengthMultiplierA) + Math.cos(xPos * waveLengthMultiplierB);
-    }
-
-    static FindLocalMinima(multiplierA, multiplierB)
-    {
-        const startX = 1 / Math.max(multiplierA, multiplierB) * Math.PI;
-        let lowestPointX = startX;
-        let lowestPointY = 9999999;
-        let stepSize = 0.1;
-        let isDecrementingX = false;
-
-        for (let i = 0; i < 40; i++) {
-            let offset = isDecrementingX ? lowestPointX - stepSize : lowestPointX + stepSize;
-            let currentY = Terrain.getHeight(offset, multiplierA, multiplierB);
-
-            if (currentY <= lowestPointY) {
-                lowestPointX = offset;
-                lowestPointY = currentY;
-            }
-            else {
-                let nextY = Terrain.getHeight(offset + 0.001, multiplierA, multiplierB);
-                // Check if the nextY is still smaller than the currentY, indicating that we have to use smaller steps.
-                if (isDecrementingX == nextY <= currentY) stepSize *= 0.1;
-                isDecrementingX = (nextY > currentY);
-            }
+    expandWaves() {
+        let index = this.waves.length;
+        if (index === 0) {
+            this.waves.push({
+                x0: 0,
+                y0: this.canvasHeight - 200,
+                x1: 100,
+                y1: this.canvasHeight - 100,
+            });
+            index++;
         }
-        return lowestPointX;
+        while (this.furthestX < this.canvasWidth) {
+            const isCurve = (index % 2 === 0);
+            let waveLine = {};
+            if (isCurve) {
+                const prevElement = this.waves[index -1];
+                const isHill = !(index % 4 === 0);
+                waveLine = Terrain.CurveLine(prevElement, isHill);
+            } else {
+                const prevElement = this.waves[index -1];
+                waveLine = Terrain.StraightLine(prevElement);
+            }
+            if (waveLine.y1 > this.canvasHeight) waveLine.y1 = this.canvasHeight;
+            this.waves.push(waveLine);
+            this.furthestX = waveLine.x1;
+            index++;
+        }
     }
+
+    static StraightLine(prevLine) {
+        let x = prevLine.x1;
+        let y = prevLine.y1;
+        return {x0: x, y0: y, x1: x + 5, y1: y};
+    }
+
+    static CurveLine(prevCurve, isHill)
+    {
+        const x0 = prevCurve.x1;
+        const x1 = x0 + Terrain.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, Math.random());
+        const y0 = prevCurve.y1;
+        let y1 = (isHill)
+            ? y0 - Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
+            : y0 + Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random());
+        
+        return {x0, y0, x1, y1};
+    }
+
+    static SmoothStep(p0, p1, t)
+    {
+        if (t < p0) return 0;
+        if (t >= p1) return 1;
+        const x = (t - p0) / (p1 - p0);
+        return x * x * (3 - 2 * x);
+    }
+    
+    static Lerp(p0, p1, t) { return p0 + (p1 - p0) * t; }
 }
 
 function startGame() {
