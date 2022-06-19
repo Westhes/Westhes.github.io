@@ -19,8 +19,9 @@ class Game {
         this.targetFixedUpdate = 1 / targetFixedUpdateRate;
         this.targetFixedUpdateMS = 1000 / targetFixedUpdateRate;
         this.targetFrameRate = 1 / targetFrameRate;
+        this.targetFrameRateMS = 1000 / targetFrameRate;
 
-        this.stop = true;
+        this.stop = false;
         this.gameObjects = [];
 
         // Get the right update method.
@@ -71,7 +72,7 @@ class Game {
         // The refresh rate is less important, we can be less accurate here.
         if (frameDelta >= this.targetFrameRate)
         {
-            this.lastFrame = now;
+            this.lastFrame = now - (now - this.lastFrame - this.targetFrameRateMS);
             this.render();
         }
     }
@@ -97,7 +98,7 @@ class Game {
     }
 
     render() {
-        this.stop = true;
+        // this.stop = true;
         
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.gameObjects.forEach(gameObject => {
@@ -142,39 +143,38 @@ class Game {
     }
 }
 
-class Test
+class FPSCounter
 {
-    constructor() {
+    constructor(game) {
         this.x = 10;
         this.y = 10;
-        this.counter = 0;
-        this.lastUpdate = performance.now();
+        this.fps = 0;
+
+        // Manually calculate rendered frames
+        this.lastSecond = performance.now();
+        this.targetFrameRate = Math.round(1 / game.targetFrameRate);
+        this.ticks = 0;
+        this.renderedFramesPerSecond = 0;
     }
 
     update(deltaTime) {
-
-    }
+        this.fps = 1/deltaTime;
+     }
     
-    fixedUpdate(fixedDeltaTime) {
-        //this.counter += 1;
-        //let t = performance.now();
-        //let ticksDifference = (t - this.lastUpdate);
-        //console.log("counter:", this.counter, " Ticks since last: ", ticksDifference);
-        //this.lastUpdate = t;
-
-        this.x += 5 * fixedDeltaTime;
-    }
+    fixedUpdate(fixedDeltaTime) { }
 
     render(ctx) {
-        ctx.beginPath();
-        ctx.arc(75, 75, 50, 0, Math.PI * 2, true); // Outer circle
-        ctx.moveTo(110, 75);
-        ctx.arc(75, 75, 35, 0, Math.PI, false);  // Mouth (clockwise)
-        ctx.moveTo(65, 65);
-        ctx.arc(60, 65, 5, 0, Math.PI * 2, true);  // Left eye
-        ctx.moveTo(95, 65);
-        ctx.arc(90, 65, 5, 0, Math.PI * 2, true);  // Right eye
-        ctx.stroke();
+        this.ticks++;
+        if (this.ticks >= this.targetFrameRate) {
+            let now = performance.now();
+            // Calculate the fps by counting the frames dividing it by the time passed in seconds
+            this.renderedFramesPerSecond = (this.ticks / ((now-this.lastSecond)/1000)).toFixed(2);
+            this.lastSecond = now;
+            this.ticks = 0;
+        }
+
+        ctx.fillText(this.fps.toFixed(2) + " Update rate", this.x, this.y);
+        ctx.fillText(this.renderedFramesPerSecond + " Frame rate", this.x, this.y + 10);
     }
 
     onCanvasResize(width, height) {}
@@ -203,7 +203,6 @@ class Terrain
     render(ctx) {
         ctx.beginPath();
         ctx.moveTo(0, this.canvasHeight);
-        // console.log("Hello", this.waves);
         for (let i = 0; i < this.waves.length; i++) {
             const element = this.waves[i];
             const isCurve = element.y0 !== element.y1;
@@ -217,9 +216,6 @@ class Terrain
             }
             
         }
-        
-        //ctx.lineTo(this.canvasWidth, 0);
-        console.log(this);
         ctx.lineTo(this.canvasWidth, this.canvasHeight);
         ctx.fill();
     }
@@ -290,11 +286,43 @@ class Terrain
     static Lerp(p0, p1, t) { return p0 + (p1 - p0) * t; }
 }
 
+class Player {
+    constructor(terrain) {
+        this.x = 15;
+        this.y = 10;
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.terrain = terrain;
+        this.isGrounded = false;
+    }
+
+    update(deltaTime) {
+    }
+    
+    fixedUpdate(fixedDeltaTime) {
+        if (!this.isGrounded) this.velocityY += 9.81 * fixedDeltaTime;
+        //let groundHeight = this.terrain.
+
+
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+    }
+
+    render(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    onCanvasResize(width, height) {}
+}
+
 function startGame() {
-    const game = new Game(20, 20);
-    //const timer = new Test();
-    game.addGameobject(new Test());
-    game.addGameobject(new Terrain());
+    const game = new Game(60, 20);
+    const terrain = new Terrain();
+    game.addGameobject(new FPSCounter(game));
+    game.addGameobject(terrain);
+    game.addGameobject(new Player(terrain));
 }
 
 startGame();
