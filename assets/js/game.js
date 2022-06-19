@@ -182,7 +182,7 @@ class Test
 
 class Terrain
 {
-    static MinWaveWidth = 100;
+    static MinWaveWidth = 150;
     static MaxWaveWidth = 300;
     static MinWaveHeight = 100;
     static MaxWaveHeight = 200;
@@ -204,16 +204,18 @@ class Terrain
         ctx.beginPath();
         ctx.moveTo(0, this.canvasHeight);
         // console.log("Hello", this.waves);
+        let isCurve = true;
         for (let i = 0; i < this.waves.length; i++) {
             const element = this.waves[i];
-            const isCurve = (i % 2 === 0);
             if (isCurve) {
                 for (let x = element.x0; x < element.x1; x++) {
                     ctx.lineTo(x, Terrain.Lerp(element.y0, element.y1, Terrain.SmoothStep(element.x0, element.x1, x)));
+                    if (element.y0 < element.y1) isCurve = false
                 }
             }
             else {
                 ctx.lineTo(element.x1, element.y1);
+                isCurve = true;
             }
             
         }
@@ -236,20 +238,20 @@ class Terrain
             this.waves.push({
                 x0: 0,
                 y0: this.canvasHeight - 200,
-                x1: 100,
-                y1: this.canvasHeight - 100,
+                x1: Terrain.MinWaveWidth,
+                y1: this.canvasHeight - Terrain.MinWaveHeight,
             });
             index++;
         }
         while (this.furthestX < this.canvasWidth) {
-            const isCurve = (index % 2 === 0);
+            const prevElement = this.waves[this.waves.length -1];
+            const isCurve = (prevElement.y0 === prevElement.y1);
             let waveLine = {};
             if (isCurve) {
-                const prevElement = this.waves[index -1];
-                const isHill = !(index % 4 === 0);
-                waveLine = Terrain.CurveLine(prevElement, isHill);
+                waveLine = Terrain.CurveLine(prevElement);
+                this.waves.push(waveLine);
+                waveLine = Terrain.Mirror(waveLine);
             } else {
-                const prevElement = this.waves[index -1];
                 waveLine = Terrain.StraightLine(prevElement);
             }
             if (waveLine.y1 > this.canvasHeight) waveLine.y1 = this.canvasHeight;
@@ -265,17 +267,15 @@ class Terrain
         return {x0: x, y0: y, x1: x + 5, y1: y};
     }
 
-    static CurveLine(prevCurve, isHill)
-    {
+    static CurveLine(prevCurve) {
         const x0 = prevCurve.x1;
         const x1 = x0 + Terrain.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, Math.random());
         const y0 = prevCurve.y1;
-        let y1 = (isHill)
-            ? y0 - Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
-            : y0 + Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random());
-        
+        let y1 = y0 - Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
         return {x0, y0, x1, y1};
     }
+
+    static Mirror(prevCurve) { return { x0: prevCurve.x1, y0: prevCurve.y1, x1: prevCurve.x1 + prevCurve.x1 - prevCurve.x0, y1: prevCurve.y0 }; }
 
     static SmoothStep(p0, p1, t)
     {
