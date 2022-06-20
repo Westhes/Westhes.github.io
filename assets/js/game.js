@@ -50,23 +50,24 @@ class Game {
         let delta = (now - this.lastUpdate)/1000;
         let fixedDelta = (now - this.lastFixedUpdate)/1000; 
         let frameDelta = (now - this.lastFrame)/1000;
-        
         this.lastUpdate = now;
         
-        this.fps = 1/delta; // Remove?
-
         // Update
-        this.update(delta);
+        this.update(delta, now);
         
         // While loop so we can catch up if neccesary(?)
         // Using an if statement speeds up gameplay if necessary, but gives a smoother catchup experience.
         if (fixedDelta >= this.targetFixedUpdate)
         {
+            // Actual fixedUpdate
+            //let diff = (now - this.lastFixedUpdate) / 1000;
+            //console.log("diff: ",diff, "FixedUpdate:", this.targetFixedUpdate);
+
             // In a ideal world there is no delay, but that's obviously not the case.
             // Subtract the delay to make the next event fire ever so slightly faster.
             this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
             // Lets just tell the method 
-            this.fixedUpdate(this.targetFixedUpdate);
+            this.fixedUpdate(this.targetFixedUpdate, now);
         }
 
         // The refresh rate is less important, we can be less accurate here.
@@ -85,15 +86,15 @@ class Game {
         })
     }
 
-    update(deltaTime) {
+    update(deltaTime, now) {
         this.gameObjects.forEach(gameObject => {
-            gameObject.update(deltaTime);
+            gameObject.update(deltaTime, now);
         });
     }
 
-    fixedUpdate(fixedDeltaTime) {
+    fixedUpdate(fixedDeltaTime, now) {
         this.gameObjects.forEach(gameObject => {
-            gameObject.fixedUpdate(fixedDeltaTime);
+            gameObject.fixedUpdate(fixedDeltaTime, now);
         });
     }
 
@@ -157,11 +158,11 @@ class FPSCounter
         this.renderedFramesPerSecond = 0;
     }
 
-    update(deltaTime) {
+    update(deltaTime, now) {
         this.fps = 1/deltaTime;
      }
     
-    fixedUpdate(fixedDeltaTime) { }
+    fixedUpdate(fixedDeltaTime, now) { }
 
     render(ctx) {
         this.ticks++;
@@ -196,11 +197,16 @@ class Terrain
 
         this.waves = [];
         this.furthestX = 0;
+        this.hasSave = false;
     }
 
-    update(deltaTime) {}
-    fixedUpdate(fixedDeltaTime){}
+    update(deltaTime, now) {}
+    fixedUpdate(fixedDeltaTime, now){}
     render(ctx) {
+        if (this.hasSave) {
+            ctx.restore();
+            return;
+        }
         ctx.beginPath();
         ctx.moveTo(0, this.canvasHeight);
         for (let i = 0; i < this.waves.length; i++) {
@@ -208,13 +214,12 @@ class Terrain
             const isCurve = element.y0 !== element.y1;
             if (isCurve) {
                 for (let x = element.x0; x < element.x1; x++) {
-                    ctx.lineTo(x, Terrain.Lerp(element.y0, element.y1, Terrain.SmoothStep(element.x0, element.x1, x)));
+                    ctx.lineTo(x, MathExtension.Lerp(element.y0, element.y1, MathExtension.SmoothStep(element.x0, element.x1, x)));
                 }
             }
             else {
                 ctx.lineTo(element.x1, element.y1);
             }
-            
         }
         ctx.lineTo(this.canvasWidth, this.canvasHeight);
         ctx.fill();
@@ -223,6 +228,7 @@ class Terrain
     onCanvasResize(width, height) {
         this.canvasWidth = width;
         this.canvasHeight = height;
+        this.hasSave = false;
         this.expandWaves();
     }
 
@@ -257,6 +263,19 @@ class Terrain
         }
     }
 
+    getWaveAtPosition(x) {
+        for (let i = 0; i < this.waves.length; i++) {
+            const element = this.waves[i];
+            if (x < element.x1) return element;
+        }
+        // if (wave.y0 === wave.y1) return wave.y0;
+        // return Terrain.Lerp(wave.y0, wave.y1, Terrain.SmoothStep(wave.x0, wave.x1, x));
+    }
+
+    static getWaveHeightAtPosition(x, wave) {
+        return MathExtension.Lerp(wave.y0, wave.y1, MathExtension.SmoothStep(wave.x0, wave.x1, x));
+    }
+
     static StraightLine(prevLine) {
         let x = prevLine.x1;
         let y = prevLine.y1;
@@ -265,11 +284,11 @@ class Terrain
 
     static CurveLine(prevCurve, isHill) {
         const x0 = prevCurve.x1;
-        const x1 = x0 + Terrain.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, Math.random());
+        const x1 = x0 + MathExtension.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, Math.random());
         const y0 = prevCurve.y1;
         let y1 = (isHill) 
-            ? y0 - Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
-            : y0 + Terrain.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random());
+            ? y0 - MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
+            : y0 + MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random());
         return {x0, y0, x1, y1};
     }
 
@@ -282,95 +301,130 @@ class Terrain
         const x = (t - p0) / (p1 - p0);
         return x * x * (3 - 2 * x);
     }
-    
+}
+
+class MathExtension {
     static Lerp(p0, p1, t) { return p0 + (p1 - p0) * t; }
 
     static Unlerp(p0, p1, t) { return (t - p0) / (p1 - p0); }
+
+    static Clamp (num, min, max) { return Math.min(Math.max(num, min), max); }
+
+    static SmoothStep(p0, p1, t)
+    {
+        if (t < p0) return 0;
+        if (t >= p1) return 1;
+        const x = (t - p0) / (p1 - p0);
+        return x * x * (3 - 2 * x);
+    }
+
 }
 
 class Player {
-    constructor(terrain, usePhysics) {
-        this.usePhysics = usePhysics;
-        if (usePhysics)
-        {
-            this.x = 15;
-            this.y = 10;
-            this.ix = 15;
-            this.iy = 10;
-            this.velocityX = 0;
-            this.velocityY = 0;
-            this.terrain = terrain;
-            this.isGrounded = false;
+    constructor(terrain) {
+        // Last fixed update positions
+        this.x = 15;
+        this.y = 10;
+        // Interpolation
+        this.ix = 15;
+        this.iy = 10;
+        // Interpolation limits
+        this.iMaxX = terrain.canvasWidth;
+        this.iMaxY = 999999;
+        this.iMinX = 0;
+        this.iMinY = -100;
 
-            this.lastFixedUpdate = 0;
-            this.expectedNextFixedUpdate = 0;
-            this.fixedDeltaTime = 0;
-            this.waitingCount = 0;
+        // Velocity
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.terrain = terrain;
+        this.isGrounded = false;
 
-        }
-        else {
-            this.x = 15;
-            this.y = 40;
-        }
-        
-        //window.addEventListener('keydown', this.input.bind(this), false);
+        this.lastFixedUpdate = 0;
+        this.predictedNextFixedUpdate = 0;
+        this.fixedDeltaTime = 0;
+
+        // this.floor
+        window.addEventListener('keydown', this.input.bind(this), false);
     }
 
-    update(deltaTime) {
-        if (this.usePhysics) {
-            // Get the time between previous and now
-            let t = Terrain.Unlerp(this.lastFixedUpdate, this.expectedNextFixedUpdate, performance.now());
-            // if (t >= 1) {
-            //     // Don't do anything
-            //     this.waitingCount++;
-            //     //console.log("Stalling..");
-            //     // this.ix = this.x = this.x + this.velocityX * this.fixedDeltaTime;
-            //     // this.iy = this.y = this.y + this.velocityY * this.fixedDeltaTime;
-            // }
-            // else {
-                // if (this.waitingCount >= 0) console.log("Waited", this.waitingCount, "updates..");
-                this.ix = Terrain.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
-                this.iy = Terrain.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
-
-                // this.waitingCount = 0;
-            // }
-            // console.log(t);
-            // console.log(this.iy);
-        }
+    update(deltaTime, now) {
+        // Get the time between previous and now
+        let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, performance.now());
+        // Interpolate between previous fixed update and the next one
+        this.ix = Player.interpolate(this.x, this.x + this.velocityX * this.fixedDeltaTime, t, this.iMinX, this.iMaxX); //MathExtension.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
+        this.iy = Player.interpolate(this.y, this.y + this.velocityY * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);//MathExtension.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
     }
     
-    fixedUpdate(fixedDeltaTime) {
-        if (this.usePhysics) {
-            let now = performance.now();
-            let t = Terrain.Unlerp(this.lastFixedUpdate, this.expectedNextFixedUpdate, now);
+    fixedUpdate(fixedDeltaTime, now) {
+        // FixedUpdate might get called a update later, which could slow down/stutter the velocity if we say t = 1.
+        let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, now);
+        
+        // console.log("Last: ", this.lastFixedUpdate, " Predicted: ", this.predictedNextFixedUpdate, " Actual:", now);
+        this.lastFixedUpdate = now;
+        this.predictedNextFixedUpdate = this.lastFixedUpdate + fixedDeltaTime * 1000;
+        this.fixedDeltaTime = fixedDeltaTime;
+        
+        if (isFinite(t))
+        {
+            // this.ix = this.x = MathExtension.Lerp(this.x, this.x + this.velocityX * fixedDeltaTime, t);
+            // this.iy = this.y = MathExtension.Lerp(this.y, this.y + this.velocityY * fixedDeltaTime, t);
+            this.x = this.ix;
+            this.y = this.iy;
+
+            const wave = this.terrain.getWaveAtPosition(this.ix);
+            const floorHeight = Terrain.getWaveHeightAtPosition(this.ix, wave);
+
+            const predictedX = this.x + this.velocityX * fixedDeltaTime;
+            const predictedY = this.y + this.velocityY * fixedDeltaTime;
+
             
-            this.lastFixedUpdate = now;
-            let fixedFrameRate = 1/ fixedDeltaTime;
-            this.expectedNextFixedUpdate = this.lastFixedUpdate + fixedFrameRate;
-            this.fixedDeltaTime = fixedDeltaTime;
+            this.iMaxY = floorHeight
             
-            if (!isNaN(t) && isFinite(t))
-            {
-                this.ix = this.x = Terrain.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
-                this.iy = this.y = Terrain.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
+            // If the player is in the air
+            // 900 < 1000 - 5
+            if (this.iy < floorHeight - 5) {
+                this.isGrounded = false;
+                console.log("In air!");
+                this.velocityY += 9.81;
+            // 900 < 1000
+            } else if (this.iy < floorHeight) {
+                this.isGrounded = true;
+                console.log("close..");
+            } else {
+                console.log("Grounded!");
+                this.isGrounded = true;
+                this.iy = floorHeight;
+                this.y = floorHeight;
+                console.log(this.velocityY);
+
+                if (Math.abs(this.velocityY) <= 20)
+                    this.velocityY = 0;
+                else
+                    this.velocityY *= -0.6;
+                //this.velocityY = 0;
             }
-            this.velocityX = 200;
+
+            if (this.ix >= this.iMaxX || this.ix <= this.iMinX) {
+                this.velocityX *= -0.8;
+            }
+            // this.velocityX = 200;
+            // this.terrain.
         }
+
+        // Apply drag
+        this.velocityX *= .999;
+        this.velocityY *= .999;
+    }
+
+    static interpolate(x1, x2, t, min, max) {
+        return MathExtension.Clamp(MathExtension.Lerp(x1, x2, t), min, max);
     }
 
     render(ctx) {
-        if (this.usePhysics)
-        {
-            ctx.beginPath();
-            ctx.arc(this.ix, this.iy, 10, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        else {
-            this.x += 8;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        ctx.beginPath();
+        ctx.arc(this.ix, this.iy, 10, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     onCanvasResize(width, height) {}
@@ -381,6 +435,9 @@ class Player {
             case 83: // 'S' pressed
                 this.velocityY = 2;
                 break;
+            case 68: // 'D' pressed
+                this.velocityX = 100;
+                break;
         }
     }
 }
@@ -390,8 +447,7 @@ function startGame() {
     const terrain = new Terrain();
     game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
-    game.addGameobject(new Player(terrain, true));
-    game.addGameobject(new Player(terrain, false));
+    game.addGameobject(new Player(terrain));
 }
 
 startGame();
