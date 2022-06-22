@@ -36,8 +36,8 @@ class Game {
         isPlaying = true;
         let now = performance.now();
         this.lastUpdate = now;
-        this.lastFixedUpdate = now;
-        this.lastFrame = now;
+        this.lastFixedUpdate = now - this.targetFixedUpdateMS;
+        this.lastFrame = now - this.targetFrameRateMS;
         console.log(this);
         this.updateMethod(this.gameLoop.bind(this));
     }
@@ -52,23 +52,23 @@ class Game {
         const frameDelta = (now - this.lastFrame)/1000;
         this.lastUpdate = now;
         
-        // Update
-        this.update(delta, now);
-        
         // While loop so we can catch up if neccesary(?)
         // Using an if statement speeds up gameplay if necessary, but gives a smoother catchup experience.
         if (fixedDelta >= this.targetFixedUpdate)
         {
             // Actual fixedUpdate
-            //let diff = (now - this.lastFixedUpdate) / 1000;
+            let diff = (now - this.lastFixedUpdate) / 1000;
             //console.log("diff: ",diff, "FixedUpdate:", this.targetFixedUpdate);
 
             // In a ideal world there is no delay, but that's obviously not the case.
             // Subtract the delay to make the next event fire ever so slightly faster.
             this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
             // Lets just tell the method 
-            this.fixedUpdate(this.targetFixedUpdate, now);
+            this.fixedUpdate(diff, now);
         }
+
+        // Update
+        this.update(delta, now);
 
         // The refresh rate is less important, we can be less accurate here.
         if (frameDelta >= this.targetFrameRate)
@@ -111,7 +111,7 @@ class Game {
             case 27: // 'ESC'ape
             case 80: // 'P'
                 isPlaying = !isPlaying;
-                console.log("Is Playing = ", !isPlaying);
+                console.log("Is Playing = ", isPlaying);
                 if (isPlaying === true) {
                     this.startLoop();
                 }
@@ -423,8 +423,8 @@ class Player {
         this.x = 300;
         this.y = 10;
         // Interpolation
-        this.ix = 15;
-        this.iy = 10;
+        this.ix = this.x;
+        this.iy = this.y;
         // Interpolation limits
         this.iMaxX = terrain.canvasWidth;
         this.iMaxY = 999999;
@@ -462,7 +462,6 @@ class Player {
         // Note: do not use predictedX/Y since these will be changed soon.
         let lerpX = MathExtension.LerpBetween(this.x, this.x + this.velocity.x * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
         let lerpY = MathExtension.LerpBetween(this.y, this.y + this.velocity.y * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
-
         // If the value was clamped it means we've hit something, and should get the next direction/velocity.
         if (lerpX.isClamped || lerpY.isClamped) {
             // TODO: check if there is a next redirection available.
@@ -476,7 +475,6 @@ class Player {
     
     fixedUpdate(fixedDeltaTime, now) {
         // FixedUpdate might get called a update later, which could slow down/stutter the velocity if we say t = 1.
-        let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, now);
         
         // console.log("Last: ", this.lastFixedUpdate, " Predicted: ", this.predictedNextFixedUpdate, " Actual:", now);
         this.lastFixedUpdate = now;
@@ -516,39 +514,37 @@ class Player {
         // if (this.ix >= this.iMaxX || this.ix <= this.iMinX) {
         //     this.velocity.x *= -0.8;
         // }
+
+        // Prepare interpolation
+        this.x = this.ix;
+        this.y = this.iy;
+        // console.log("Current x: ", this.x," y: ", this.y, "Expected/Predicted x: ", this.predictedX, " y: ", this.predictedY);
+        this.predictedX = this.x + this.velocity.x * fixedDeltaTime;
+        this.predictedY = this.y + this.velocity.y * fixedDeltaTime;
+        // this.collisionPoint
+
+        // Get wave at current position
+        const waveBelow = this.terrain.getWaveAtPosition(this.x);
+
+        let result = Terrain.getWaveIntersection(
+            {x: this.x, y: this.y}, 
+            {x: this.predictedX, y: this.predictedY},
+            waveBelow);
+
+        //TODO: update this logic below to be accurate
         
-        if (isFinite(t))
-        {
-            this.x = this.ix;
-            this.y = this.iy;
-            // console.log("Current x: ", this.x," y: ", this.y, "Expected/Predicted x: ", this.predictedX, " y: ", this.predictedY);
-            this.predictedX = this.x + this.velocity.x * fixedDeltaTime;
-            this.predictedY = this.y + this.velocity.y * fixedDeltaTime;
-            // this.collisionPoint
-
-            // Get wave at current position
-            const waveBelow = this.terrain.getWaveAtPosition(this.x);
-
-            let result = Terrain.getWaveIntersection(
-                {x: this.x, y: this.y}, 
-                {x: this.predictedX, y: this.predictedY},
-                waveBelow);
-
-            //TODO: update this logic below to be accurate
-            
-            // Calculate the height of the floor, and it's slope
-            this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedX, waveBelow);
-            const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
-            const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedX + horizontalDirection, waveBelow);
-            
-            this.iMaxY = this.predictedFloorHeight;
-            this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
-            this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
-            this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
-            
-            // For testing only.
-            this.mouseDirection = MathExtension.Normalize(this.predictedX - this.mousePos.x, this.predictedFloorHeight - this.mousePos.y);
-        }
+        // Calculate the height of the floor, and it's slope
+        this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedX, waveBelow);
+        const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
+        const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedX + horizontalDirection, waveBelow);
+        
+        this.iMaxY = this.predictedFloorHeight;
+        this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
+        this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
+        this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
+        
+        // For testing only.
+        this.mouseDirection = MathExtension.Normalize(this.predictedX - this.mousePos.x, this.predictedFloorHeight - this.mousePos.y);
     }
 
     render(ctx) {
