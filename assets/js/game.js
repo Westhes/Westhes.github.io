@@ -8,7 +8,7 @@ class Game {
         this.fps = 0;
         this.canvas = document.getElementById("gameWindow");
         this.canvas.width = document.body.clientWidth - 30;
-        this.canvas.height = 500;
+        this.canvas.height = 900;
         this.width = this.canvas.width;
         this.height = this.canvas.height;
         this.context = this.canvas.getContext('2d');
@@ -21,7 +21,6 @@ class Game {
         this.targetFrameRate = 1 / targetFrameRate;
         this.targetFrameRateMS = 1000 / targetFrameRate;
 
-        this.stop = false;
         this.gameObjects = [];
 
         // Get the right update method.
@@ -34,22 +33,23 @@ class Game {
     }
 
     startLoop() {
-        this.stop = false;
-        this.lastUpdate = performance.now();
-        this.lastFixedUpdate = performance.now();
-        this.lastFrame = performance.now();
+        isPlaying = true;
+        let now = performance.now();
+        this.lastUpdate = now;
+        this.lastFixedUpdate = now;
+        this.lastFrame = now;
         console.log(this);
         this.updateMethod(this.gameLoop.bind(this));
     }
 
     gameLoop() {
-        if (this.stop === false) {
+        if (isPlaying === true) {
             this.updateMethod(this.gameLoop.bind(this));
         }
-        let now = performance.now();
-        let delta = (now - this.lastUpdate)/1000;
-        let fixedDelta = (now - this.lastFixedUpdate)/1000; 
-        let frameDelta = (now - this.lastFrame)/1000;
+        const now = performance.now();
+        const delta = (now - this.lastUpdate)/1000;
+        const fixedDelta = (now - this.lastFixedUpdate)/1000; 
+        const frameDelta = (now - this.lastFrame)/1000;
         this.lastUpdate = now;
         
         // Update
@@ -99,8 +99,6 @@ class Game {
     }
 
     render() {
-        // this.stop = true;
-        
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.gameObjects.forEach(gameObject => {
             gameObject.render(this.context);
@@ -112,9 +110,9 @@ class Game {
         switch (keyCode) {
             case 27: // 'ESC'ape
             case 80: // 'P'
-                this.stop = !this.stop;
-                console.log("Is Playing = ", !this.stop);
-                if (this.stop === false) {
+                isPlaying = !isPlaying;
+                console.log("Is Playing = ", !isPlaying);
+                if (isPlaying === true) {
                     this.startLoop();
                 }
                 break;
@@ -265,13 +263,58 @@ class Terrain
         }
     }
 
+    /**
+     * Gets the wave which contains worldspace x.
+     * @param {float} x the worldspace x of the object.
+     * @returns the wave which contains the provided worlspace x.
+     */
     getWaveAtPosition(x) {
         for (let i = 0; i < this.waves.length; i++) {
             const element = this.waves[i];
             if (x < element.x1) return element;
         }
-        // if (wave.y0 === wave.y1) return wave.y0;
-        // return Terrain.Lerp(wave.y0, wave.y1, Terrain.SmoothStep(wave.x0, wave.x1, x));
+    }
+
+    /**
+     * Calculates the waveheight by dividing the wave into 5 slices and performing line-line intersection logic on them.
+     * @param {*} position position of the object.
+     * @param {*} predictedPosition direction of the object.
+     * @param {*} wave the wave from which we should start calculating
+     */
+    static getWaveIntersection(position, predictedPosition, wave) {
+        let hit = MathExtension.LineIntersection(position, predictedPosition,
+            { x: wave.x0, y: wave.y0}, {x:wave.x1, y:wave.y1});
+    }
+
+    static waveIntersection(position, predictedDirection, wave) {
+        const waveSegments = Terrain.SubdivideWave(wave);
+        for (let i = 0; i < waveSegments.length -1; i++) {
+            const element = waveSegments[i];
+            const intersection = MathExtension.LineIntersection(position, predictedDirection, element, waveSegments[i+1]);
+            
+            if (intersection.intersect === true) {
+                return intersection;
+            }
+        }
+        return { intersect: false };
+    }
+
+    /**
+     * Subdivides the wave into 5 pieces.
+     * @param {*} wave the wave to subdivide
+     */
+    static SubdivideWave(wave) {
+        const wavePoints = [];
+        // 0,  1,2,3,4,5, 6,
+        for (let index = 0; index < 6; index++) {
+            // const element = array[index];
+            let x = MathExtension.Lerp(wave.x0, x1, (index / (6 - 1)));
+            // wavePoints
+            wavePoints.push({
+                x, 
+                y: MathExtension.Lerp(wave.y0, wave.y1, MathExtension.SmoothStep(wave.x0, wave.x1, x)) 
+            });
+        }
     }
 
     static getWaveHeightAtPosition(x, wave) {
@@ -302,9 +345,25 @@ class Terrain
 class MathExtension {
     static Lerp(p0, p1, t) { return p0 + (p1 - p0) * t; }
 
-    static LerpBetween(x1, x2, t, min, max) { return MathExtension.Clamp(MathExtension.Lerp(x1, x2, t), min, max); }
+    static LerpBetween(x1, x2, t, min, max) { return MathExtension.TryClamp(MathExtension.Lerp(x1, x2, t), min, max); }
 
     static Unlerp(p0, p1, t) { return (t - p0) / (p1 - p0); }
+
+    static TryClamp(num, min, max) {
+        let isClamped = false;
+        let distanceOverExtended = 0;
+        if (num < min) {
+            isClamped = true;
+            distanceOverExtended = min - num;
+            num = min;
+        }
+        if (num > max) {
+            isClamped = true;
+            distanceOverExtended = num - max;
+            num = max;
+        }
+        return { isClamped, result: num, extrapolatedDistance: distanceOverExtended };
+    }
 
     static Clamp (num, min, max) { return Math.min(Math.max(num, min), max); }
 
@@ -316,23 +375,45 @@ class MathExtension {
         return x * x * (3 - 2 * x);
     }
 
-    static DotProduct(x0, y0, x1, y1) {
-        return (x0 * x1 + y0 * y1);
+    static DotProduct(x0, y0, x1, y1) { return (x0 * x1 + y0 * y1); }
+
+    static SurfaceNormal(surfaceDir) {
+        if (surfaceDir.x < 0)
+            return {x: -surfaceDir.y, y: surfaceDir.x};
+        return {x: surfaceDir.y, y: -surfaceDir.x};
     }
 
-    static SurfaceNormal(x,y) {
-        if (x < 0)
-            return {x: -y, y: x};
-        return {x: y, y: -x};
+    static Reflect(inDir, surfaceNormal) {
+        const d = MathExtension.DotProduct(inDir.x, inDir.y, surfaceNormal.x, surfaceNormal.y);
+        const factor = -2 * d;
+        return {x: factor * surfaceNormal.x + inDir.x,
+                y: factor * surfaceNormal.y + inDir.y};
     }
+
+    static Magnitude(vec) { return Math.sqrt(vec.x * vec.x + vec.y * vec.y); }
 
     static Normalize(x, y) {
-        // const x0 = x * x;
-        // const y0 = y * y;
-        // const length = x0 + y0;
-        // return { x: x * x0 / length, y: y * y0 / length};
         const length = Math.sqrt(x * x + y * y);
         return { x:(x / length), y:(y / length) };
+    }
+
+    static LineIntersection(lineA0, lineA1, lineB0, lineB1) {
+        const a0 = lineA1.y - lineA0.y;
+        const b0 = lineA0.x - lineA1.x;
+        const c0 = a0 * lineA0.x + b0 * lineA0.y;
+
+        const a1 = lineB1.y - lineB0.y;
+        const b1 = lineB0.x - lineB1.x;
+        const c1 = a1 * lineB0.x + b1 * lineB0.y;
+
+        const delta = a0 * b1 - a1 * b0;
+        if (delta === 0) {
+            return { intersect:false, result: {} };
+        } else {
+            const x = b1 * c0 - b0 * c1;
+            const y = a0 * c1 - a1 * c0;
+            return { intersect:true, result: {x,y}};
+        }
     }
 }
 
@@ -354,12 +435,12 @@ class Player {
         this.predictedX = 0;
         this.predictedY = 0;
         this.predictedFloorHeight = 0;
-        this.floorDirection = null;
-        this.floorSurfaceNormal = null;
+        this.collisionPoint = null;
+        this.floorSlopeDir = null;
+        this.floorNormal = null;
 
         // Velocity
-        this.velocityX = 0;
-        this.velocityY = 0;
+        this.velocity = { x:0, y:0 };
         this.terrain = terrain;
         this.isGrounded = false;
 
@@ -375,10 +456,22 @@ class Player {
 
     update(deltaTime, now) {
         // Get the time between previous and now
-        let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, performance.now());
+        let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, now);
+        
         // Interpolate between previous fixed update and the next one
-        this.ix = MathExtension.LerpBetween(this.x, this.x + this.velocityX * this.fixedDeltaTime, t, this.iMinX, this.iMaxX); //MathExtension.Lerp(this.x, this.x + this.velocityX * this.fixedDeltaTime, t);
-        this.iy = MathExtension.LerpBetween(this.y, this.y + this.velocityY * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);//MathExtension.Lerp(this.y, this.y + this.velocityY * this.fixedDeltaTime, t);
+        // Note: do not use predictedX/Y since these will be changed soon.
+        let lerpX = MathExtension.LerpBetween(this.x, this.x + this.velocity.x * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
+        let lerpY = MathExtension.LerpBetween(this.y, this.y + this.velocity.y * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
+
+        // If the value was clamped it means we've hit something, and should get the next direction/velocity.
+        if (lerpX.isClamped || lerpY.isClamped) {
+            // TODO: check if there is a next redirection available.
+            console.log(lerpX.extrapolatedDistance, lerpY.extrapolatedDistance);
+            // Use the overextended distance to displace the object in the new direction
+            // 
+        }
+        this.ix = lerpX.result;
+        this.iy = lerpY.result;
     }
     
     fixedUpdate(fixedDeltaTime, now) {
@@ -389,134 +482,138 @@ class Player {
         this.lastFixedUpdate = now;
         this.predictedNextFixedUpdate = this.lastFixedUpdate + fixedDeltaTime * 1000;
         this.fixedDeltaTime = fixedDeltaTime;
+
+        
+        // Apply drag
+        this.velocity.x -= this.velocity.x * 0.1 / (1/this.fixedDeltaTime);
+        this.velocity.y -= this.velocity.y * 0.1 / (1/this.fixedDeltaTime);
+
+        // If the player is in the air
+        if (this.iy + 5 < this.predictedFloorHeight) {
+            this.isGrounded = false;
+            console.log("In air!");
+            this.velocity.y += 9.81 * 100 * fixedDeltaTime;
+            // this.velocity.x += 9.81 * 30 * fixedDeltaTime;
+        // 900 < 1000
+        // } 
+        // // Barely called, usually skipped
+        // else if (this.iy < this.predictedFloorHeight) {
+        //     // Glide over the floor?
+        //     this.isGrounded = true;
+        } else {
+            // console.log("Grounded!");
+            this.isGrounded = true;
+            this.iy = this.predictedFloorHeight;
+            this.y = this.predictedFloorHeight;
+
+            // if (Math.abs(this.velocity.y) <= 20)
+            //     this.velocity.y = 0;
+            // else
+                this.velocity.y *= -0.9;
+        }
+
+        // Corner bounce
+        // if (this.ix >= this.iMaxX || this.ix <= this.iMinX) {
+        //     this.velocity.x *= -0.8;
+        // }
         
         if (isFinite(t))
         {
             this.x = this.ix;
             this.y = this.iy;
-
-            const wave = this.terrain.getWaveAtPosition(this.ix);
-            //const floorHeight = Terrain.getWaveHeightAtPosition(this.ix, wave);
-
             // console.log("Current x: ", this.x," y: ", this.y, "Expected/Predicted x: ", this.predictedX, " y: ", this.predictedY);
-            this.predictedX = this.x + this.velocityX * fixedDeltaTime;
-            this.predictedY = this.y + this.velocityY * fixedDeltaTime;
+            this.predictedX = this.x + this.velocity.x * fixedDeltaTime;
+            this.predictedY = this.y + this.velocity.y * fixedDeltaTime;
+            // this.collisionPoint
+
+            // Get wave at current position
+            const waveBelow = this.terrain.getWaveAtPosition(this.x);
+
+            let result = Terrain.getWaveIntersection(
+                {x: this.x, y: this.y}, 
+                {x: this.predictedX, y: this.predictedY},
+                waveBelow);
+
+            //TODO: update this logic below to be accurate
             
-            this.iMaxY = this.predictedFloorHeight
-
-
-            // Calculate floor
-            const horizontalDirection = (this.velocityX >= 0) ? 1 : -1;
-            const floorForward = Terrain.getWaveHeightAtPosition(this.predictedX + horizontalDirection, wave);
+            // Calculate the height of the floor, and it's slope
+            this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedX, waveBelow);
+            const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
+            const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedX + horizontalDirection, waveBelow);
             
-            this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedX, wave);
-            this.floorDirection = MathExtension.Normalize(horizontalDirection, floorForward - this.predictedFloorHeight);
-            this.floorSurfaceNormal = MathExtension.SurfaceNormal(this.floorDirection.x, this.floorDirection.y);
-
-            //this.velocityX = 20;
-            // If the player is in the air
-            // 900 < 1000 - 5
-            if (this.iy < this.predictedFloorHeight - 5) {
-                this.isGrounded = false;
-                // console.log("In air!");
-                this.velocityY += 9.81 * 100 * fixedDeltaTime;
-            // 900 < 1000
-            } else if (this.iy < this.predictedFloorHeight) {
-                this.isGrounded = true;
-                // console.log("close..");
-                // Glide over the floor?
-            } else {
-                // console.log("Grounded!");
-                this.isGrounded = true;
-                this.iy = this.predictedFloorHeight;
-                this.y = this.predictedFloorHeight;
-                // console.log(this.velocityY);
-
-                if (Math.abs(this.velocityY) <= 20)
-                    this.velocityY = 0;
-                else
-                    this.velocityY *= -0.9;
-                //this.velocityY = 0;
-            }
-
-            if (this.ix >= this.iMaxX || this.ix <= this.iMinX) {
-                this.velocityX *= -0.8;
-            }
-            // this.velocityX = 200;
-            // this.terrain.
+            this.iMaxY = this.predictedFloorHeight;
+            this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
+            this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
+            this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
+            
+            // For testing only.
+            this.mouseDirection = MathExtension.Normalize(this.predictedX - this.mousePos.x, this.predictedFloorHeight - this.mousePos.y);
         }
-
-        // Apply drag
-        //this.velocityX -= this.velocityX * 0.8 / (1/this.fixedDeltaTime);
-        this.velocityY -= this.velocityY * 0.8 / (1/this.fixedDeltaTime);
     }
 
     render(ctx) {
         this.canvas = ctx;
         const defaultColor = "black"
+        const playerColor = "purple";
         // Draw player
         ctx.beginPath();
         ctx.arc(this.ix, this.iy, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "purple";
+        ctx.fillStyle = playerColor;
         ctx.fill();
-        ctx.fillStyle = defaultColor;
 
-        if (Debug && this.floorDirection != null)
+        if (Debug && this.floorSlopeDir != null)
         {
             // Variables
             const lineLength = 100;
             const surfaceRightColor = "red";
             const surfaceUpColor = "yellow"; 
-            const dotColor = "blue";
+            const reflectionDirColor = "blue";
             const mouseColor = "green";
             ctx.lineWidth = 5;
-            // Direction from the mouse to the predicted X and floor Y.
-            const mouseDirection = MathExtension.Normalize(this.predictedX - this.mousePos.x, this.predictedFloorHeight - this.mousePos.y);
-
-            // Draw predicted location
+            
+            // Draw direction + velocity
             ctx.beginPath();
             ctx.strokeStyle = surfaceRightColor;
             ctx.moveTo(this.ix, this.iy);
             ctx.lineTo(this.predictedX, this.predictedY);
             ctx.stroke();
+            
+            // Draw ghost
+            ctx.beginPath();
+            ctx.arc(this.predictedX, this.predictedY, 10, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(123, 123, 123, 0.7)";
+            // ctx.fillStyle = playerColor;
+            ctx.fill();
 
             // Draw terrain right
             ctx.beginPath();
             ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + this.floorDirection.x * lineLength, this.predictedFloorHeight + this.floorDirection.y * lineLength);
+            ctx.lineTo(this.predictedX + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
             ctx.stroke();
 
             // Draw surfacenormal
             ctx.beginPath();
             ctx.strokeStyle = surfaceUpColor;
             ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + this.floorSurfaceNormal.x * lineLength, this.predictedFloorHeight + this.floorSurfaceNormal.y * lineLength);
+            ctx.lineTo(this.predictedX + this.floorNormal.x * lineLength, this.predictedFloorHeight + this.floorNormal.y * lineLength);
+            ctx.stroke();
+
+            // Draw reflection
+            ctx.beginPath();
+            ctx.strokeStyle = reflectionDirColor;
+            ctx.moveTo(this.predictedX, this.predictedFloorHeight);
+            ctx.lineTo(this.predictedX + this.floorReflectionDir.x * lineLength, this.predictedFloorHeight + this.floorReflectionDir.y * lineLength);
             ctx.stroke();
 
             // Draw path to mouse:
-            ctx.beginPath();
-            ctx.strokeStyle = mouseColor;
-            ctx.moveTo(this.predictedX - mouseDirection.x * 50, this.predictedFloorHeight - mouseDirection.y * 50);
-            ctx.lineTo(this.predictedX, this.predictedFloorHeight);
-            ctx.stroke();
-
-            // Draw dot
-            ctx.beginPath();
-            ctx.strokeStyle = dotColor;
-            let d = MathExtension.DotProduct(mouseDirection.x, mouseDirection.y, this.floorSurfaceNormal.x, this.floorSurfaceNormal.y);
-
-            // Unity approach:
-            const factor = -2 * d;
-            const dirVec = {x: factor * this.floorSurfaceNormal.x + mouseDirection.x,
-                            y: factor * this.floorSurfaceNormal.y + mouseDirection.y};
-
-            ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + dirVec.x * lineLength, this.predictedFloorHeight + dirVec.y * lineLength);
-
-            ctx.stroke();
-
+            // ctx.beginPath();
+            // ctx.strokeStyle = mouseColor;
+            // ctx.moveTo(this.predictedX - this.mouseDirection.x * 50, this.predictedFloorHeight - this.mouseDirection.y * 50);
+            // ctx.lineTo(this.predictedX, this.predictedFloorHeight);
+            // ctx.stroke();
         }
         ctx.strokeStyle = defaultColor;
+        ctx.fillStyle = defaultColor;
         ctx.lineWidth = 1;
     }
 
@@ -526,30 +623,25 @@ class Player {
         const keyCode = key.keyCode;
         switch(keyCode) {
             case 83: // 'S' pressed
-                this.velocityY = 2;
+                this.velocity.y = 2;
                 break;
             case 68: // 'D' pressed
-                this.velocityX += 100;
+                this.velocity.x += 100;
                 break;
 
             case 37: // Left pressed
-                this.mousePos = {x: -1, y: 0}
                 break;
             case 38: // Up pressed
-                this.mousePos = {x: 0, y: 1}
                 break
             case 39: // Right pressed
-                this.mousePos = {x: 1, y: 0}
                 break;
             case 40: // Down pressed
-                this.mousePos = {x: 0, y: -1}
                 break;
         }
     }
 
     mouseInput(e) {
         this.mousePos = Player.getMousePos(e);
-        // console.log(this.mousePos);
     }
     static getMousePos(evt) {
         let canvas = document.getElementById("gameWindow");
@@ -562,11 +654,12 @@ class Player {
 }
 
 function startGame() {
-    const game = new Game(144, 20);
+    const game = new Game(144, 5);
     const terrain = new Terrain();
     game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
     game.addGameobject(new Player(terrain));
 }
 const Debug = true;
+let isPlaying = true;
 startGame();
