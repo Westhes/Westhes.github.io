@@ -282,14 +282,24 @@ class Terrain
      * @param {*} wave the wave from which we should start calculating
      */
     static getWaveIntersection(position, predictedPosition, wave) {
-        // let hit = MathExtension.LineIntersection(position, predictedPosition,
-        //     { x: wave.x0, y: wave.y0}, {x:wave.x1, y:wave.y1});
-
-        // TODO: check left and right if not found..
-        let waveIntersectionResult = Terrain.waveIntersection(position, predictedPosition, wave);
-        if (waveIntersectionResult.intersect) {
-
+        const searchRight = (position.x < predictedPosition.x);
+        let currentWave = wave;
+        while (currentWave !== null) {
+            const waveResult = Terrain.waveIntersection(position, predictedPosition, wave);
+            if (waveResult.intersect) {
+                return { ...waveResult, wave: currentWave }; // Include the correct wave.
+            }
+            
+            // Continue looking into the direction of the predicted line position
+            if (searchRight) {
+                currentWave = currentWave.next;
+                if (currentWave !== null && predictedPosition.x < currentWave.x0) return waveResult;
+            } else {
+                currentWave = currentWave.previous;
+                if (currentWave !== null && predictedPosition.x > currentWave.x1) return waveResult;
+            }
         }
+        return { intersect: false };
     }
 
     static waveIntersection(position, predictedDirection, wave) {
@@ -529,14 +539,14 @@ class Player {
         // Get wave at current position
         const waveBelow = this.terrain.getWaveAtPosition(this.x);
 
-        let result = Terrain.getWaveIntersection(
+        this.waveIntersectionResult = Terrain.getWaveIntersection(
             {x: this.x, y: this.y}, 
             {x: this.predictedX, y: this.predictedY},
             waveBelow);
 
+        console.log(this.waveIntersectionResult);
         this.waveBelow = waveBelow;
 
-        // console.log(result);
         //TODO: update this logic below to be accurate
         
         // Calculate the height of the floor, and it's slope
@@ -619,17 +629,12 @@ class Player {
             }
             ctx.stroke();
 
-            let waveIntersectionResult = Terrain.waveIntersection(
-                {x: this.x, y: this.y}, 
-                {x: this.predictedX, y: this.predictedY},
-                this.waveBelow); // this.waveBelow;
-            console.log("Result:", waveIntersectionResult);
-            
-            if (waveIntersectionResult.intersect) {
+            // Draw intersection (if there is any)
+            if (this.waveIntersectionResult.intersect) {
                 ctx.beginPath();
                 ctx.strokeStyle = "red";
-                ctx.moveTo(waveIntersectionResult.position.x, waveIntersectionResult.position.y);
-                ctx.lineTo(waveIntersectionResult.position.x + 100, waveIntersectionResult.position.y);
+                ctx.moveTo(this.waveIntersectionResult.position.x, this.waveIntersectionResult.position.y);
+                ctx.lineTo(this.waveIntersectionResult.position.x + 100, this.waveIntersectionResult.position.y);
                 ctx.stroke();
             }
 
