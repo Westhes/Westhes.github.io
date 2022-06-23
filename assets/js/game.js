@@ -282,8 +282,14 @@ class Terrain
      * @param {*} wave the wave from which we should start calculating
      */
     static getWaveIntersection(position, predictedPosition, wave) {
-        let hit = MathExtension.LineIntersection(position, predictedPosition,
-            { x: wave.x0, y: wave.y0}, {x:wave.x1, y:wave.y1});
+        // let hit = MathExtension.LineIntersection(position, predictedPosition,
+        //     { x: wave.x0, y: wave.y0}, {x:wave.x1, y:wave.y1});
+
+        // TODO: check left and right if not found..
+        let waveIntersectionResult = Terrain.waveIntersection(position, predictedPosition, wave);
+        if (waveIntersectionResult.intersect) {
+
+        }
     }
 
     static waveIntersection(position, predictedDirection, wave) {
@@ -308,13 +314,14 @@ class Terrain
         // 0,  1,2,3,4,5, 6,
         for (let index = 0; index < 6; index++) {
             // const element = array[index];
-            let x = MathExtension.Lerp(wave.x0, x1, (index / (6 - 1)));
+            let x = MathExtension.Lerp(wave.x0, wave.x1, (index / (6 - 1)));
             // wavePoints
             wavePoints.push({
                 x, 
                 y: MathExtension.Lerp(wave.y0, wave.y1, MathExtension.SmoothStep(wave.x0, wave.x1, x)) 
             });
         }
+        return wavePoints;
     }
 
     static getWaveHeightAtPosition(x, wave) {
@@ -397,23 +404,21 @@ class MathExtension {
         return { x:(x / length), y:(y / length) };
     }
 
-    static LineIntersection(lineA0, lineA1, lineB0, lineB1) {
-        const a0 = lineA1.y - lineA0.y;
-        const b0 = lineA0.x - lineA1.x;
-        const c0 = a0 * lineA0.x + b0 * lineA0.y;
+    static LineIntersection(p0, p1, p2, p3) {
+        const s1_x = p1.x - p0.x;
+        const s1_y = p1.y - p0.y;
+        const s2_x = p3.x - p2.x;
+        const s2_y = p3.y - p2.y;
+        const s = (-s1_y * (p0.x - p2.x) + s1_x * (p0.y - p2.y)) / (-s2_x * s1_y + s1_x * s2_y);
+        const t = ( s2_x * (p0.y - p2.y) - s2_y * (p0.x - p2.x)) / (-s2_x * s1_y + s1_x * s2_y);
 
-        const a1 = lineB1.y - lineB0.y;
-        const b1 = lineB0.x - lineB1.x;
-        const c1 = a1 * lineB0.x + b1 * lineB0.y;
-
-        const delta = a0 * b1 - a1 * b0;
-        if (delta === 0) {
-            return { intersect:false, result: {} };
-        } else {
-            const x = b1 * c0 - b0 * c1;
-            const y = a0 * c1 - a1 * c0;
-            return { intersect:true, result: {x,y}};
-        }
+        if (s >= 0 && s <= 1 && t >= 0 && t <= 1) { 
+            // Collision detected
+            const x = p0.x + (t * s1_x);
+            const y = p0.y + (t * s1_y);
+            return { intersect:true, position: {x,y}};
+        } 
+        return { intersect:false, position: {} }; // No collision 
     }
 }
 
@@ -449,9 +454,7 @@ class Player {
         this.fixedDeltaTime = 0;
 
         // this.floor
-        this.mousePos = { x: 0, y: 0};
         window.addEventListener('keydown', this.input.bind(this), false);
-        onmousemove = this.mouseInput.bind(this);
     }
 
     update(deltaTime, now) {
@@ -465,7 +468,7 @@ class Player {
         // If the value was clamped it means we've hit something, and should get the next direction/velocity.
         if (lerpX.isClamped || lerpY.isClamped) {
             // TODO: check if there is a next redirection available.
-            console.log(lerpX.extrapolatedDistance, lerpY.extrapolatedDistance);
+            // console.log(lerpX.extrapolatedDistance, lerpY.extrapolatedDistance);
             // Use the overextended distance to displace the object in the new direction
             // 
         }
@@ -531,6 +534,9 @@ class Player {
             {x: this.predictedX, y: this.predictedY},
             waveBelow);
 
+        this.waveBelow = waveBelow;
+
+        // console.log(result);
         //TODO: update this logic below to be accurate
         
         // Calculate the height of the floor, and it's slope
@@ -544,7 +550,7 @@ class Player {
         this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
         
         // For testing only.
-        this.mouseDirection = MathExtension.Normalize(this.predictedX - this.mousePos.x, this.predictedFloorHeight - this.mousePos.y);
+        this.mouseDirection = MathExtension.Normalize(this.predictedX - mousePosition.x, this.predictedFloorHeight - mousePosition.y);
     }
 
     render(ctx) {
@@ -557,7 +563,7 @@ class Player {
         ctx.fillStyle = playerColor;
         ctx.fill();
 
-        if (Debug && this.floorSlopeDir != null)
+        if (Debug)
         {
             // Variables
             const lineLength = 100;
@@ -601,6 +607,32 @@ class Player {
             ctx.lineTo(this.predictedX + this.floorReflectionDir.x * lineLength, this.predictedFloorHeight + this.floorReflectionDir.y * lineLength);
             ctx.stroke();
 
+            // Draw wave
+            let waveSegments = Terrain.SubdivideWave(this.waveBelow);
+            ctx.beginPath();
+            ctx.strokeStyle = "green";
+            ctx.lineWidth = 3;
+            ctx.moveTo(waveSegments[0].x, waveSegments[0].y);
+            for (let index = 1; index < waveSegments.length; index++) {
+                const element = waveSegments[index];
+                ctx.lineTo(element.x, element.y);
+            }
+            ctx.stroke();
+
+            let waveIntersectionResult = Terrain.waveIntersection(
+                {x: this.x, y: this.y}, 
+                {x: this.predictedX, y: this.predictedY},
+                this.waveBelow); // this.waveBelow;
+            console.log("Result:", waveIntersectionResult);
+            
+            if (waveIntersectionResult.intersect) {
+                ctx.beginPath();
+                ctx.strokeStyle = "red";
+                ctx.moveTo(waveIntersectionResult.position.x, waveIntersectionResult.position.y);
+                ctx.lineTo(waveIntersectionResult.position.x + 100, waveIntersectionResult.position.y);
+                ctx.stroke();
+            }
+
             // Draw path to mouse:
             // ctx.beginPath();
             // ctx.strokeStyle = mouseColor;
@@ -635,18 +667,16 @@ class Player {
                 break;
         }
     }
+}
 
-    mouseInput(e) {
-        this.mousePos = Player.getMousePos(e);
-    }
-    static getMousePos(evt) {
-        let canvas = document.getElementById("gameWindow");
-        var rect = canvas.getBoundingClientRect();
-        return {
-            x: evt.clientX - rect.left,
-            y: evt.clientY - rect.top
-        };
-    }
+let mousePosition = {x:0, y:0};
+function getMousePos(e) {
+    let canvas = document.getElementById("gameWindow");
+    var rect = canvas.getBoundingClientRect();
+    mousePosition = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
 }
 
 function startGame() {
@@ -655,6 +685,8 @@ function startGame() {
     game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
     game.addGameobject(new Player(terrain));
+    
+    onmousemove = getMousePos;
 }
 const Debug = true;
 let isPlaying = true;
