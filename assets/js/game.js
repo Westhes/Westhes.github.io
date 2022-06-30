@@ -64,7 +64,7 @@ class Game {
             // Subtract the delay to make the next event fire ever so slightly faster.
             this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
             // Lets just tell the method 
-            this.fixedUpdate(diff, now);
+            this.fixedUpdate(this.targetFixedUpdate, now); // diff
         }
 
         // Update
@@ -440,7 +440,7 @@ class MathExtension {
 class Player {
     constructor(terrain) {
         // Last fixed update positions
-        this.position = {x: 300, y: 10 };
+        this.position = {x: 300, y: 500 };
         // Interpolation
         this.iPosition = this.position;
         // Interpolation limits
@@ -459,15 +459,19 @@ class Player {
         this.floorReflectionDir = { x:0, y:1 };
 
         // Velocity
-        this.velocity = { x:0, y:0 };
-        this.terrain = terrain;
+        this.velocity = { x: 0, y: 0 };
+        this.velocityMultiplier = 40;
         this.isGrounded = false;
+        this.terrain = terrain;
 
         this.lastFixedUpdate = 0;
         this.predictedNextFixedUpdate = 0;
         this.fixedDeltaTime = 0;
 
-        this.bounciness = 0.5;
+        // Variables
+        this.mass = 25;
+        this.bounciness = 0.3;
+        this.friction = 0.5;
 
         // this.floor
         window.addEventListener('keydown', this.input.bind(this), false);
@@ -479,8 +483,8 @@ class Player {
         
         // Interpolate between previous fixed update and the next one
         // Note: do not use predictedX/Y since these will be changed soon.
-        let lerpX = MathExtension.LerpBetween(this.position.x, this.position.x + this.velocity.x * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
-        let lerpY = MathExtension.LerpBetween(this.position.y, this.position.y + this.velocity.y * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
+        let lerpX = MathExtension.LerpBetween(this.position.x, this.position.x + this.velocity.x * this.velocityMultiplier * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
+        let lerpY = MathExtension.LerpBetween(this.position.y, this.position.y - this.velocity.y * this.velocityMultiplier * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
         // If the value was clamped it means we've hit something, and should get the next direction/velocity.
         if (lerpX.isClamped || lerpY.isClamped) {
             // TODO: check if there is a next redirection available.
@@ -502,44 +506,70 @@ class Player {
         this.predictedNextFixedUpdate = this.lastFixedUpdate + fixedDeltaTime * 1000;
         this.fixedDeltaTime = fixedDeltaTime;
 
-        
-        // Apply drag
-        this.velocity.x -= this.velocity.x * 0.1 / (1/this.fixedDeltaTime);
-        this.velocity.y -= this.velocity.y * 0.1 / (1/this.fixedDeltaTime);
-
-        let gravity = {
-            x: 0,
-            y: 9.81 * 100 * fixedDeltaTime,
-        }
+        const gravity = 0.981 * this.mass * fixedDeltaTime;
         // Using the intersection results of the previous update.
-        if (this.iPosition.y < this.predictedFloorHeight) {
-            // this.isGrounded = false;
-            // console.log("In air!");
-            this.velocity.y += gravity.y;
+        if (this.iPosition.y < this.predictedFloorHeight - 2) {
+            this.velocity.y -= gravity;
+            console.log("Gravity added ");
         } else {
-            gravity = { 
-                x: 9.81 * 100 * fixedDeltaTime * this.floorSlopeDir.x,
-                y: 9.81 * 100 * fixedDeltaTime * this.floorSlopeDir.y,
-            }
-            this.velocity.x += gravity.x;
-            this.velocity.y += gravity.y;
-            let mag = MathExtension.Magnitude(this.velocity) * this.bounciness;
+            // Flip slopedir around since Y is flipped in the canvas.
+            let slopeDir = this.floorSlopeDir;
+            slopeDir.y = -slopeDir.y;
             
-            if (mag < 70) {
-
-            } else {
+            const modifier = (slopeDir.y > 0) ? -1 : 1;
+            let mag = MathExtension.Magnitude(this.velocity);
+            
+            if (true){//Math.abs(this.velocity.y) < 100000){ //mag < 100) {
+                // Align velocity with the surface 
                 this.velocity = {
-                    x: this.floorReflectionDir.x * mag,
-                    y: this.floorReflectionDir.y * mag,
+                    x: slopeDir.x * mag,
+                    y: slopeDir.y * mag,
+                }
+
+                let counterForce = {
+                    x: slopeDir.x * modifier * gravity,
+                    y: slopeDir.y * modifier * gravity,
+                }
+                if (slopeDir.y === 0) {
+                    counterForce = { x: 0, y: 0};
+                }
+
+                this.velocity = {
+                    x: this.velocity.x + counterForce.x,
+                    y: this.velocity.y + counterForce.y,
+                }
+            } else {
+                // this.velocity.y += gravity;
+                mag += gravity;
+                console.log("Bouncing...");
+                this.velocity = {
+                    x: this.floorReflectionDir.x * mag * this.bounciness,
+                    y: this.floorReflectionDir.y * mag * this.bounciness,
                 };
                 // this.iPosition = {
                 //     x: this.iPosition.x + this.floorReflectionDir.x * fixedDeltaTime,
                 //     y: this.iPosition.y + this.floorReflectionDir.y * fixedDeltaTime,
                 // };
             }
-            // console.log("Now:", now, " Direction change:", this.floorReflectionDir, " Magnitude: ", mag, this.velocity, " Iposition.y ", this.iPosition.y, " predictedHeight", this.predictedFloorHeight);
-            // this.velocity.y *= -0.7;
         }
+
+        // Apply drag
+        let drag = {
+            x: (this.velocity.x * (1 - this.fixedDeltaTime * this.friction)),
+            y: (this.velocity.y * (1 - this.fixedDeltaTime * this.friction)),
+        }
+        this.velocity.x = drag.x;// (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
+        this.velocity.y = drag.y; //- 1 * (1/this.fixedDeltaTime));
+        if (MathExtension.Magnitude(this.velocity) < 2.5 && this.floorSlopeDir.y === 0) {
+            console.log("Stopped velocity!");
+            this.velocity = {
+                x: 0,
+                y: 0,
+            }
+        }
+        // console.log("Velocity gained: +", addedVelocity, " current ", this.velocity);
+        console.log("Velocity mag: ",MathExtension.Magnitude(this.velocity), " velocity:"/*, this.velocity*/);
+
 
         // Corner bounce
         if (this.iPosition.x >= this.iMaxX || this.iPosition.x <= this.iMinX) {
@@ -549,8 +579,8 @@ class Player {
         // Prepare interpolation
         this.position = this.iPosition;
         this.predictedPosition = {
-            x: this.position.x + this.velocity.x * fixedDeltaTime,
-            y: this.position.y + this.velocity.y * fixedDeltaTime,
+            x: this.position.x + this.velocity.x * this.velocityMultiplier * fixedDeltaTime,
+            y: this.position.y - this.velocity.y * this.velocityMultiplier * fixedDeltaTime,
         };
         
         // this.collisionPoint
@@ -575,10 +605,11 @@ class Player {
         }
         
         // Calculate the height of the floor, and it's slope
-        const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
+        const horizontalDirection = (this.velocity.x > 0) ? 1 : -1;
         this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedPosition.x, this.waveBelow);
-        const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
-
+        let nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
+        if (nextPredictedFloor > this.predictedFloorHeight && this.velocity.x === 0)
+            nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x - horizontalDirection, this.waveBelow);
         this.iMaxY = this.predictedFloorHeight;
         this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
         this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
@@ -602,30 +633,41 @@ class Player {
         {
             // Variables
             const lineLength = 100;
+            const velocityColor = "black";
             const surfaceRightColor = "red";
             const surfaceUpColor = "yellow"; 
             const reflectionDirColor = "blue";
+            const waveCollider = "purple";
+            const intersectionColor = "pink";
             const mouseColor = "green";
             ctx.lineWidth = 5;
             
             // Draw direction + velocity
+            // ctx.beginPath();
+            // ctx.strokeStyle = velocityColor;
+            // ctx.moveTo(this.iPosition.x, this.iPosition.y);
+            // ctx.lineTo(this.predictedPosition.x, this.predictedPosition.y);
+            // ctx.stroke();
+
             ctx.beginPath();
-            ctx.strokeStyle = surfaceRightColor;
+            ctx.strokeStyle = "green";
             ctx.moveTo(this.iPosition.x, this.iPosition.y);
-            ctx.lineTo(this.predictedPosition.x, this.predictedPosition.y);
+            ctx.lineTo(this.iPosition.x, this.iPosition.y + this.velocity.y * 100);
             ctx.stroke();
-            
+
+
             // Draw ghost
-            ctx.beginPath();
-            ctx.arc(this.predictedPosition.x, this.predictedPosition.y, 10, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(123, 123, 123, 0.7)";
-            ctx.fill();
+            // ctx.beginPath();
+            // ctx.arc(this.predictedPosition.x, this.predictedPosition.y, 10, 0, Math.PI * 2);
+            // ctx.fillStyle = "rgba(123, 123, 123, 0.7)";
+            // ctx.fill();
 
             // Draw terrain right
-            // ctx.beginPath();
-            // ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
-            // ctx.lineTo(this.predictedPosition.x + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
-            // ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = surfaceRightColor;
+            ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            ctx.lineTo(this.predictedPosition.x + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
+            ctx.stroke();
 
             // Draw surfacenormal
             ctx.beginPath();
@@ -642,25 +684,25 @@ class Player {
             ctx.stroke();
 
             // Draw wave
-            let waveSegments = Terrain.SubdivideWave(this.waveBelow);
-            ctx.beginPath();
-            ctx.strokeStyle = "green";
-            ctx.lineWidth = 3;
-            ctx.moveTo(waveSegments[0].x, waveSegments[0].y);
-            for (let index = 1; index < waveSegments.length; index++) {
-                const element = waveSegments[index];
-                ctx.lineTo(element.x, element.y);
-            }
-            ctx.stroke();
+            // let waveSegments = Terrain.SubdivideWave(this.waveBelow);
+            // ctx.beginPath();
+            // ctx.strokeStyle = waveCollider;
+            // ctx.lineWidth = 3;
+            // ctx.moveTo(waveSegments[0].x, waveSegments[0].y);
+            // for (let index = 1; index < waveSegments.length; index++) {
+            //     const element = waveSegments[index];
+            //     ctx.lineTo(element.x, element.y);
+            // }
+            // ctx.stroke();
 
             // Draw intersection (if there is any)
-            if (this.waveIntersectionResult.intersect) {
-                ctx.beginPath();
-                ctx.strokeStyle = "red";
-                ctx.moveTo(this.waveIntersectionResult.position.x, this.waveIntersectionResult.position.y);
-                ctx.lineTo(this.waveIntersectionResult.position.x + 100, this.waveIntersectionResult.position.y);
-                ctx.stroke();
-            }
+            // if (this.waveIntersectionResult.intersect) {
+            //     ctx.beginPath();
+            //     ctx.strokeStyle = intersectionColor;
+            //     ctx.moveTo(this.waveIntersectionResult.position.x, this.waveIntersectionResult.position.y);
+            //     ctx.lineTo(this.waveIntersectionResult.position.x + 100, this.waveIntersectionResult.position.y);
+            //     ctx.stroke();
+            // }
 
             // Draw path to mouse:
             // ctx.beginPath();
@@ -717,6 +759,6 @@ function startGame() {
     
     onmousemove = getMousePos;
 }
-const Debug = true;
+const Debug = false;
 let isPlaying = true;
 startGame();
