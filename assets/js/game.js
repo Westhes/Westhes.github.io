@@ -348,11 +348,11 @@ class Terrain
 
     static CurveLine(prevCurve, isHill) {
         const x0 = prevCurve.x1;
-        const x1 = x0 + MathExtension.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, Math.random());
+        const x1 = x0 + MathExtension.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, MathExtension.Random01(x0));
         const y0 = prevCurve.y1;
         let y1 = (isHill) 
-            ? y0 - MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random())
-            : y0 + MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, Math.random());
+            ? y0 - MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, MathExtension.Random01(x1))
+            : y0 + MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, MathExtension.Random01(x1));
         return {previous: null, next: null, x0, y0, x1, y1};
     }
 
@@ -430,16 +430,19 @@ class MathExtension {
         } 
         return { intersect:false, position: {} }; // No collision 
     }
+
+    static Random01(p0) {
+        // return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+        return (Math.sin(MathExtension.DotProduct(p0, 0, 12.9898, 78.233)) * 43758.5453) % 1;
+    }
 }
 
 class Player {
     constructor(terrain) {
         // Last fixed update positions
-        this.x = 300;
-        this.y = 10;
+        this.position = {x: 300, y: 10 };
         // Interpolation
-        this.ix = this.x;
-        this.iy = this.y;
+        this.iPosition = this.position;
         // Interpolation limits
         this.iMaxX = terrain.canvasWidth;
         this.iMaxY = 999999;
@@ -447,12 +450,13 @@ class Player {
         this.iMinY = -100;
 
         // Predicted location before the next fixedUpdate
-        this.predictedX = 0;
-        this.predictedY = 0;
-        this.predictedFloorHeight = 0;
+        this.predictedPosition = {x: this.position.x, y: this.position.y };
+        this.predictedFloorHeight = 999999;
+        this.waveIntersectionResult = { intersect: false };
         this.collisionPoint = null;
         this.floorSlopeDir = null;
         this.floorNormal = null;
+        this.floorReflectionDir = { x:0, y:1 };
 
         // Velocity
         this.velocity = { x:0, y:0 };
@@ -462,6 +466,8 @@ class Player {
         this.lastFixedUpdate = 0;
         this.predictedNextFixedUpdate = 0;
         this.fixedDeltaTime = 0;
+
+        this.bounciness = 0.5;
 
         // this.floor
         window.addEventListener('keydown', this.input.bind(this), false);
@@ -473,8 +479,8 @@ class Player {
         
         // Interpolate between previous fixed update and the next one
         // Note: do not use predictedX/Y since these will be changed soon.
-        let lerpX = MathExtension.LerpBetween(this.x, this.x + this.velocity.x * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
-        let lerpY = MathExtension.LerpBetween(this.y, this.y + this.velocity.y * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
+        let lerpX = MathExtension.LerpBetween(this.position.x, this.position.x + this.velocity.x * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
+        let lerpY = MathExtension.LerpBetween(this.position.y, this.position.y + this.velocity.y * this.fixedDeltaTime, t, this.iMinY, this.iMaxY);
         // If the value was clamped it means we've hit something, and should get the next direction/velocity.
         if (lerpX.isClamped || lerpY.isClamped) {
             // TODO: check if there is a next redirection available.
@@ -482,8 +488,10 @@ class Player {
             // Use the overextended distance to displace the object in the new direction
             // 
         }
-        this.ix = lerpX.result;
-        this.iy = lerpY.result;
+        this.iPosition = {
+            x: lerpX.result,
+            y: lerpY.result,
+        };
     }
     
     fixedUpdate(fixedDeltaTime, now) {
@@ -499,68 +507,85 @@ class Player {
         this.velocity.x -= this.velocity.x * 0.1 / (1/this.fixedDeltaTime);
         this.velocity.y -= this.velocity.y * 0.1 / (1/this.fixedDeltaTime);
 
-        // If the player is in the air
-        if (this.iy + 5 < this.predictedFloorHeight) {
-            this.isGrounded = false;
-            console.log("In air!");
-            this.velocity.y += 9.81 * 100 * fixedDeltaTime;
-            // this.velocity.x += 9.81 * 30 * fixedDeltaTime;
-        // 900 < 1000
-        // } 
-        // // Barely called, usually skipped
-        // else if (this.iy < this.predictedFloorHeight) {
-        //     // Glide over the floor?
-        //     this.isGrounded = true;
+        let gravity = {
+            x: 0,
+            y: 9.81 * 100 * fixedDeltaTime,
+        }
+        // Using the intersection results of the previous update.
+        if (this.iPosition.y < this.predictedFloorHeight) {
+            // this.isGrounded = false;
+            // console.log("In air!");
+            this.velocity.y += gravity.y;
         } else {
-            // console.log("Grounded!");
-            this.isGrounded = true;
-            this.iy = this.predictedFloorHeight;
-            this.y = this.predictedFloorHeight;
+            gravity = { 
+                x: 9.81 * 100 * fixedDeltaTime * this.floorSlopeDir.x,
+                y: 9.81 * 100 * fixedDeltaTime * this.floorSlopeDir.y,
+            }
+            this.velocity.x += gravity.x;
+            this.velocity.y += gravity.y;
+            let mag = MathExtension.Magnitude(this.velocity) * this.bounciness;
+            
+            if (mag < 70) {
 
-            // if (Math.abs(this.velocity.y) <= 20)
-            //     this.velocity.y = 0;
-            // else
-                this.velocity.y *= -0.9;
+            } else {
+                this.velocity = {
+                    x: this.floorReflectionDir.x * mag,
+                    y: this.floorReflectionDir.y * mag,
+                };
+                // this.iPosition = {
+                //     x: this.iPosition.x + this.floorReflectionDir.x * fixedDeltaTime,
+                //     y: this.iPosition.y + this.floorReflectionDir.y * fixedDeltaTime,
+                // };
+            }
+            // console.log("Now:", now, " Direction change:", this.floorReflectionDir, " Magnitude: ", mag, this.velocity, " Iposition.y ", this.iPosition.y, " predictedHeight", this.predictedFloorHeight);
+            // this.velocity.y *= -0.7;
         }
 
         // Corner bounce
-        // if (this.ix >= this.iMaxX || this.ix <= this.iMinX) {
-        //     this.velocity.x *= -0.8;
-        // }
+        if (this.iPosition.x >= this.iMaxX || this.iPosition.x <= this.iMinX) {
+            this.velocity.x *= -this.bounciness;
+        }
 
         // Prepare interpolation
-        this.x = this.ix;
-        this.y = this.iy;
-        // console.log("Current x: ", this.x," y: ", this.y, "Expected/Predicted x: ", this.predictedX, " y: ", this.predictedY);
-        this.predictedX = this.x + this.velocity.x * fixedDeltaTime;
-        this.predictedY = this.y + this.velocity.y * fixedDeltaTime;
+        this.position = this.iPosition;
+        this.predictedPosition = {
+            x: this.position.x + this.velocity.x * fixedDeltaTime,
+            y: this.position.y + this.velocity.y * fixedDeltaTime,
+        };
+        
         // this.collisionPoint
 
         // Get wave at current position
-        const waveBelow = this.terrain.getWaveAtPosition(this.x);
+        this.waveBelow = this.terrain.getWaveAtPosition(this.position.x);
 
         this.waveIntersectionResult = Terrain.getWaveIntersection(
-            {x: this.x, y: this.y}, 
-            {x: this.predictedX, y: this.predictedY},
-            waveBelow);
-
-        console.log(this.waveIntersectionResult);
-        this.waveBelow = waveBelow;
+            this.position, 
+            this.predictedPosition,
+            this.waveBelow);
 
         //TODO: update this logic below to be accurate
         
-        // Calculate the height of the floor, and it's slope
-        this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedX, waveBelow);
-        const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
-        const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedX + horizontalDirection, waveBelow);
+        // Update the predicted results with more accurate data.
+        if (this.waveIntersectionResult.intersect) {
+            const yt = MathExtension.Unlerp(this.position.y, this.predictedPosition.y, this.waveIntersectionResult.y);
+            this.predictedPosition = this.waveIntersectionResult.position;
+
+            // this.predictedFloorHeight = this.waveIntersectionResult.position.y;
+            // MathExtension.Unlerp(this.position)
+        }
         
+        // Calculate the height of the floor, and it's slope
+        const horizontalDirection = (this.velocity.x >= 0) ? 1 : -1;
+        this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedPosition.x, this.waveBelow);
+        const nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
+
         this.iMaxY = this.predictedFloorHeight;
         this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
         this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
         this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
         
         // For testing only.
-        this.mouseDirection = MathExtension.Normalize(this.predictedX - mousePosition.x, this.predictedFloorHeight - mousePosition.y);
+        this.mouseDirection = MathExtension.Normalize(this.predictedPosition.x - mousePosition.x, this.predictedFloorHeight - mousePosition.y);
     }
 
     render(ctx) {
@@ -569,7 +594,7 @@ class Player {
         const playerColor = "purple";
         // Draw player
         ctx.beginPath();
-        ctx.arc(this.ix, this.iy, 10, 0, Math.PI * 2);
+        ctx.arc(this.iPosition.x, this.iPosition.y, 10, 0, Math.PI * 2);
         ctx.fillStyle = playerColor;
         ctx.fill();
 
@@ -586,35 +611,34 @@ class Player {
             // Draw direction + velocity
             ctx.beginPath();
             ctx.strokeStyle = surfaceRightColor;
-            ctx.moveTo(this.ix, this.iy);
-            ctx.lineTo(this.predictedX, this.predictedY);
+            ctx.moveTo(this.iPosition.x, this.iPosition.y);
+            ctx.lineTo(this.predictedPosition.x, this.predictedPosition.y);
             ctx.stroke();
             
             // Draw ghost
             ctx.beginPath();
-            ctx.arc(this.predictedX, this.predictedY, 10, 0, Math.PI * 2);
+            ctx.arc(this.predictedPosition.x, this.predictedPosition.y, 10, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(123, 123, 123, 0.7)";
-            // ctx.fillStyle = playerColor;
             ctx.fill();
 
             // Draw terrain right
-            ctx.beginPath();
-            ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
-            ctx.stroke();
+            // ctx.beginPath();
+            // ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            // ctx.lineTo(this.predictedPosition.x + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
+            // ctx.stroke();
 
             // Draw surfacenormal
             ctx.beginPath();
             ctx.strokeStyle = surfaceUpColor;
-            ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + this.floorNormal.x * lineLength, this.predictedFloorHeight + this.floorNormal.y * lineLength);
+            ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            ctx.lineTo(this.predictedPosition.x + this.floorNormal.x * lineLength, this.predictedFloorHeight + this.floorNormal.y * lineLength);
             ctx.stroke();
 
             // Draw reflection
             ctx.beginPath();
             ctx.strokeStyle = reflectionDirColor;
-            ctx.moveTo(this.predictedX, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedX + this.floorReflectionDir.x * lineLength, this.predictedFloorHeight + this.floorReflectionDir.y * lineLength);
+            ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            ctx.lineTo(this.predictedPosition.x + this.floorReflectionDir.x * lineLength, this.predictedFloorHeight + this.floorReflectionDir.y * lineLength);
             ctx.stroke();
 
             // Draw wave
@@ -641,8 +665,8 @@ class Player {
             // Draw path to mouse:
             // ctx.beginPath();
             // ctx.strokeStyle = mouseColor;
-            // ctx.moveTo(this.predictedX - this.mouseDirection.x * 50, this.predictedFloorHeight - this.mouseDirection.y * 50);
-            // ctx.lineTo(this.predictedX, this.predictedFloorHeight);
+            // ctx.moveTo(this.predictedPosition.x - this.mouseDirection.x * 50, this.predictedFloorHeight - this.mouseDirection.y * 50);
+            // ctx.lineTo(this.predictedPosition.x, this.predictedFloorHeight);
             // ctx.stroke();
         }
         ctx.strokeStyle = defaultColor;
@@ -685,7 +709,7 @@ function getMousePos(e) {
 }
 
 function startGame() {
-    const game = new Game(144, 5);
+    const game = new Game(144, 20);
     const terrain = new Terrain();
     game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
