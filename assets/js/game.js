@@ -57,14 +57,13 @@ class Game {
         if (fixedDelta >= this.targetFixedUpdate)
         {
             // Actual fixedUpdate
-            let diff = (now - this.lastFixedUpdate) / 1000;
-            //console.log("diff: ",diff, "FixedUpdate:", this.targetFixedUpdate);
+            // let fixedDeltaTime = (now - this.lastFixedUpdate) / 1000;
 
             // In a ideal world there is no delay, but that's obviously not the case.
             // Subtract the delay to make the next event fire ever so slightly faster.
             this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
             // Lets just tell the method 
-            this.fixedUpdate(this.targetFixedUpdate, now); // diff
+            this.fixedUpdate(this.targetFixedUpdate, now); // fixedDeltaTime
         }
 
         // Update
@@ -583,6 +582,7 @@ class Player {
         }
         this.velocity.x = drag.x; // (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
         this.velocity.y = drag.y; //- 1 * (1/this.fixedDeltaTime));
+        vMagnitude = MathExtension.Magnitude(this.velocity);
 
         if (isGrounded && vMagnitude < 2.5 && isHorizontalSurface) {
             console.log("Stopped velocity!");
