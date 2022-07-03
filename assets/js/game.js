@@ -407,9 +407,23 @@ class MathExtension {
                 y: factor * surfaceNormal.y + inDir.y};
     }
 
+    /**
+     * Multiply Rad by this value in order to get degrees.
+     */
+    static Rad2Degree = 180/Math.PI;
+
+    /**
+     * Calculates the angle between two vectors.
+     * @param {*} p0 Normalized vector
+     * @param {*} p1 Normalized vector
+     * @returns the angle in radians.
+     */
+    static Angle(p0, p1) { return Math.acos(MathExtension.DotProduct(p0.x, p0.y, p1.x, p1.y)); }
+
     static Magnitude(vec) { return Math.sqrt(vec.x * vec.x + vec.y * vec.y); }
 
     static Normalize(x, y) {
+        if (x === 0 && y === 0) return { x:0, y:0 };
         const length = Math.sqrt(x * x + y * y);
         return { x:(x / length), y:(y / length) };
     }
@@ -453,9 +467,9 @@ class Player {
         this.predictedPosition = {x: this.position.x, y: this.position.y };
         this.predictedFloorHeight = 999999;
         this.waveIntersectionResult = { intersect: false };
-        this.collisionPoint = null;
-        this.floorSlopeDir = null;
-        this.floorNormal = null;
+        this.collisionPoint = null; // Unused
+        this.floorSlopeDir = {x:0, y:1};
+        this.floorNormal = {x:1, y:0};
         this.floorReflectionDir = { x:0, y:1 };
 
         // Velocity
@@ -470,8 +484,18 @@ class Player {
 
         // Variables
         this.mass = 25;
-        this.bounciness = 0.3;
-        this.friction = 0.5;
+        /** The amount of momentum loss on a bounce. 0-1, 1 = no loss. */
+        this.bounciness = 0.8;
+        /** The amount of velocity lost per update. The % of friction subtracted from velocity each frame.  */
+        this.friction = .5;
+        /** The amount pixels allowed before the object is considered Grounded */
+        this.groundedTolerance = 1;
+        /** The minimum amount of degrees required in order to bounce */
+        this.requiredBounceAngle = 30;
+        /** The minimum amount of speed required in order to bounce */
+        this.requiredBounceMagnitude = 3;
+        /** The minimum amount of speed required before it idle */
+        this.requiredMagnitude = 2.5;
 
         // this.floor
         window.addEventListener('keydown', this.input.bind(this), false);
@@ -499,68 +523,68 @@ class Player {
     }
     
     fixedUpdate(fixedDeltaTime, now) {
-        // FixedUpdate might get called a update later, which could slow down/stutter the velocity if we say t = 1.
-        
         // console.log("Last: ", this.lastFixedUpdate, " Predicted: ", this.predictedNextFixedUpdate, " Actual:", now);
-        this.lastFixedUpdate = now;
-        this.predictedNextFixedUpdate = this.lastFixedUpdate + fixedDeltaTime * 1000;
         this.fixedDeltaTime = fixedDeltaTime;
+        this.lastFixedUpdate = now;
+        this.predictedNextFixedUpdate = now + fixedDeltaTime * 1000;
 
-        const gravity = 0.981 * this.mass * fixedDeltaTime;
+        const gravityForce = 0.981 * this.mass * fixedDeltaTime;
+        const isGrounded = (this.iPosition.y > this.predictedFloorHeight - this.groundedTolerance);
+        const isHorizontalSurface = this.floorSlopeDir.y === 0;
+        let vMagnitude = MathExtension.Magnitude(this.velocity);
+
         // Using the intersection results of the previous update.
-        if (this.iPosition.y < this.predictedFloorHeight - 2) {
-            this.velocity.y -= gravity;
-            console.log("Gravity added ");
+        if (!isGrounded) {
+            this.velocity.y -= gravityForce;
+            // console.log("Gravity added ");
         } else {
             // Flip slopedir around since Y is flipped in the canvas.
             let slopeDir = this.floorSlopeDir;
             slopeDir.y = -slopeDir.y;
-            
             const modifier = (slopeDir.y > 0) ? -1 : 1;
-            let mag = MathExtension.Magnitude(this.velocity);
-            
-            if (true){//Math.abs(this.velocity.y) < 100000){ //mag < 100) {
+            const vDir = MathExtension.Normalize(this.velocity.x, -this.velocity.y);
+            const reflectionAngle = MathExtension.Angle(this.floorReflectionDir, vDir) * MathExtension.Rad2Degree;
+
+            console.log(reflectionAngle);
+            if (reflectionAngle < this.requiredBounceAngle || vMagnitude < this.requiredBounceMagnitude) {
                 // Align velocity with the surface 
                 this.velocity = {
-                    x: slopeDir.x * mag,
-                    y: slopeDir.y * mag,
+                    x: slopeDir.x * vMagnitude,
+                    y: slopeDir.y * vMagnitude,
                 }
 
-                let counterForce = {
-                    x: slopeDir.x * modifier * gravity,
-                    y: slopeDir.y * modifier * gravity,
+                let slopeForces = {
+                    x: slopeDir.x * modifier * gravityForce,
+                    y: slopeDir.y * modifier * gravityForce,
                 }
-                if (slopeDir.y === 0) {
-                    counterForce = { x: 0, y: 0};
+                if (isHorizontalSurface) {
+                    slopeForces = { x: 0, y: 0};
                 }
 
                 this.velocity = {
-                    x: this.velocity.x + counterForce.x,
-                    y: this.velocity.y + counterForce.y,
+                    x: this.velocity.x + slopeForces.x,
+                    y: this.velocity.y + slopeForces.y,
                 }
             } else {
                 // this.velocity.y += gravity;
-                mag += gravity;
+                vMagnitude += gravityForce;
                 console.log("Bouncing...");
                 this.velocity = {
-                    x: this.floorReflectionDir.x * mag * this.bounciness,
-                    y: this.floorReflectionDir.y * mag * this.bounciness,
+                    x: this.floorReflectionDir.x * vMagnitude * this.bounciness,
+                    y: -this.floorReflectionDir.y * vMagnitude * this.bounciness,
                 };
-                // this.iPosition = {
-                //     x: this.iPosition.x + this.floorReflectionDir.x * fixedDeltaTime,
-                //     y: this.iPosition.y + this.floorReflectionDir.y * fixedDeltaTime,
-                // };
             }
         }
 
         // Apply drag
         let drag = {
-            x: (this.velocity.x * (1 - this.fixedDeltaTime * this.friction)),
-            y: (this.velocity.y * (1 - this.fixedDeltaTime * this.friction)),
+            x: (this.velocity.x * (1 - fixedDeltaTime * this.friction)),
+            y: (this.velocity.y * (1 - fixedDeltaTime * this.friction)),
         }
-        this.velocity.x = drag.x;// (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
+        this.velocity.x = drag.x; // (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
         this.velocity.y = drag.y; //- 1 * (1/this.fixedDeltaTime));
-        if (MathExtension.Magnitude(this.velocity) < 2.5 && this.floorSlopeDir.y === 0) {
+
+        if (isGrounded && vMagnitude < 2.5 && isHorizontalSurface) {
             console.log("Stopped velocity!");
             this.velocity = {
                 x: 0,
@@ -568,7 +592,7 @@ class Player {
             }
         }
         // console.log("Velocity gained: +", addedVelocity, " current ", this.velocity);
-        console.log("Velocity mag: ",MathExtension.Magnitude(this.velocity), " velocity:"/*, this.velocity*/);
+        console.log("Velocity mag: ", vMagnitude, " velocity:"/*, this.velocity*/);
 
 
         // Corner bounce
@@ -608,12 +632,14 @@ class Player {
         const horizontalDirection = (this.velocity.x > 0) ? 1 : -1;
         this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedPosition.x, this.waveBelow);
         let nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
-        if (nextPredictedFloor > this.predictedFloorHeight && this.velocity.x === 0)
-            nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x - horizontalDirection, this.waveBelow);
+        
+        // Re-enabled this!!
+        // if (nextPredictedFloor > this.predictedFloorHeight && this.velocity.x === 0)
+            // nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x - horizontalDirection, this.waveBelow);
         this.iMaxY = this.predictedFloorHeight;
         this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
         this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
-        this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, this.velocity.y), this.floorNormal);
+        this.floorReflectionDir = MathExtension.Reflect(MathExtension.Normalize(this.velocity.x, -this.velocity.y), this.floorNormal);
         
         // For testing only.
         this.mouseDirection = MathExtension.Normalize(this.predictedPosition.x - mousePosition.x, this.predictedFloorHeight - mousePosition.y);
@@ -652,7 +678,7 @@ class Player {
             ctx.beginPath();
             ctx.strokeStyle = "green";
             ctx.moveTo(this.iPosition.x, this.iPosition.y);
-            ctx.lineTo(this.iPosition.x, this.iPosition.y + this.velocity.y * 100);
+            ctx.lineTo(this.iPosition.x + this.velocity.x * 50, this.iPosition.y + -this.velocity.y * 100);
             ctx.stroke();
 
 
@@ -662,19 +688,19 @@ class Player {
             // ctx.fillStyle = "rgba(123, 123, 123, 0.7)";
             // ctx.fill();
 
-            // Draw terrain right
-            ctx.beginPath();
-            ctx.strokeStyle = surfaceRightColor;
-            ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedPosition.x + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
-            ctx.stroke();
+            // Draw slopeDirection
+            // ctx.beginPath();
+            // ctx.strokeStyle = surfaceRightColor;
+            // ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            // ctx.lineTo(this.predictedPosition.x + this.floorSlopeDir.x * lineLength, this.predictedFloorHeight + this.floorSlopeDir.y * lineLength);
+            // ctx.stroke();
 
             // Draw surfacenormal
-            ctx.beginPath();
-            ctx.strokeStyle = surfaceUpColor;
-            ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
-            ctx.lineTo(this.predictedPosition.x + this.floorNormal.x * lineLength, this.predictedFloorHeight + this.floorNormal.y * lineLength);
-            ctx.stroke();
+            // ctx.beginPath();
+            // ctx.strokeStyle = surfaceUpColor;
+            // ctx.moveTo(this.predictedPosition.x, this.predictedFloorHeight);
+            // ctx.lineTo(this.predictedPosition.x + this.floorNormal.x * lineLength, this.predictedFloorHeight + this.floorNormal.y * lineLength);
+            // ctx.stroke();
 
             // Draw reflection
             ctx.beginPath();
@@ -759,6 +785,6 @@ function startGame() {
     
     onmousemove = getMousePos;
 }
-const Debug = false;
+const Debug = true;
 let isPlaying = true;
 startGame();
