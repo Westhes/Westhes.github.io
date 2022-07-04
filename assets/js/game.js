@@ -43,8 +43,9 @@ class Game {
     }
 
     gameLoop() {
-        if (isPlaying === true) {
-            this.updateMethod(this.gameLoop.bind(this));
+        this.updateMethod(this.gameLoop.bind(this));
+        if (!isPlaying) {
+            return;
         }
         const now = performance.now();
         const delta = (now - this.lastUpdate)/1000;
@@ -453,7 +454,7 @@ class MathExtension {
 class Player {
     constructor(terrain) {
         // Last fixed update positions
-        this.position = {x: 300, y: 500 };
+        this.position = {x: 300, y: 200 }; // x: 177
         // Interpolation
         this.iPosition = this.position;
         // Interpolation limits
@@ -484,26 +485,28 @@ class Player {
         // Variables
         this.mass = 25;
         /** The amount of momentum loss on a bounce. 0-1, 1 = no loss. */
-        this.bounciness = 0.8;
+        this.bounciness = .8;
         /** The amount of velocity lost per update. The % of friction subtracted from velocity each frame.  */
-        this.friction = .5;
+        this.friction = .6;
         /** The amount pixels allowed before the object is considered Grounded */
         this.groundedTolerance = 1;
         /** The minimum amount of degrees required in order to bounce */
         this.requiredBounceAngle = 30;
         /** The minimum amount of speed required in order to bounce */
-        this.requiredBounceMagnitude = 3;
+        this.requiredBounceMagnitude = 6;
         /** The minimum amount of speed required before it idle */
         this.requiredMagnitude = 2.5;
 
         // this.floor
         window.addEventListener('keydown', this.input.bind(this), false);
+
+        this.frame = 0;
     }
 
     update(deltaTime, now) {
         // Get the time between previous and now
         let t = MathExtension.Unlerp(this.lastFixedUpdate, this.predictedNextFixedUpdate, now);
-        
+
         // Interpolate between previous fixed update and the next one
         // Note: do not use predictedX/Y since these will be changed soon.
         let lerpX = MathExtension.LerpBetween(this.position.x, this.position.x + this.velocity.x * this.velocityMultiplier * this.fixedDeltaTime, t, this.iMinX, this.iMaxX);
@@ -535,7 +538,6 @@ class Player {
         // Using the intersection results of the previous update.
         if (!isGrounded) {
             this.velocity.y -= gravityForce;
-            // console.log("Gravity added ");
         } else {
             // Flip slopedir around since Y is flipped in the canvas.
             let slopeDir = this.floorSlopeDir;
@@ -566,7 +568,7 @@ class Player {
                 }
             } else {
                 // this.velocity.y += gravity;
-                vMagnitude += gravityForce;
+                // vMagnitude += gravityForce;
                 console.log("Bouncing...");
                 this.velocity = {
                     x: this.floorReflectionDir.x * vMagnitude * this.bounciness,
@@ -577,11 +579,12 @@ class Player {
 
         // Apply drag
         let drag = {
-            x: (this.velocity.x * (1 - fixedDeltaTime * this.friction)),
-            y: (this.velocity.y * (1 - fixedDeltaTime * this.friction)),
+            x: this.velocity.x - (this.velocity.x * (1 - fixedDeltaTime * this.friction)),
+            y: this.velocity.y - (this.velocity.y * (1 - fixedDeltaTime * this.friction)),
         }
-        this.velocity.x = drag.x; // (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
-        this.velocity.y = drag.y; //- 1 * (1/this.fixedDeltaTime));
+
+        this.velocity.x -= drag.x; // (this.velocity.x * (1 - this.fixedDeltaTime * 1)); //- 1 * (1/this.fixedDeltaTime));
+        this.velocity.y -= drag.y; //- 1 * (1/this.fixedDeltaTime));
         vMagnitude = MathExtension.Magnitude(this.velocity);
 
         if (isGrounded && vMagnitude < 2.5 && isHorizontalSurface) {
@@ -590,9 +593,10 @@ class Player {
                 x: 0,
                 y: 0,
             }
+            isPlaying = false;
         }
         // console.log("Velocity gained: +", addedVelocity, " current ", this.velocity);
-        console.log("Velocity mag: ", vMagnitude, " velocity:"/*, this.velocity*/);
+        console.log("Velocity mag: ", vMagnitude, " gravity:", gravityForce);
 
 
         // Corner bounce
@@ -621,8 +625,11 @@ class Player {
         
         // Update the predicted results with more accurate data.
         if (this.waveIntersectionResult.intersect) {
+            console.log("Intersection!");
+            // isPlaying = false;
             const yt = MathExtension.Unlerp(this.position.y, this.predictedPosition.y, this.waveIntersectionResult.y);
             this.predictedPosition = this.waveIntersectionResult.position;
+            this.predictedPosition.y -= 0.1;
 
             // this.predictedFloorHeight = this.waveIntersectionResult.position.y;
             // MathExtension.Unlerp(this.position)
@@ -785,6 +792,6 @@ function startGame() {
     
     onmousemove = getMousePos;
 }
-const Debug = true;
+const Debug = false;
 let isPlaying = true;
 startGame();
