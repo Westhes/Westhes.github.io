@@ -82,7 +82,7 @@ class Game {
                 this.render();
             }
         } catch (err) {
-            this.isPlaying = false;
+            isPlaying = false;
         }
         this.stopped = !isPlaying;
     }
@@ -236,6 +236,7 @@ class Terrain
         if (this.canvasHeight === width && this.canvasHeight === height) { 
             return;
         }
+        this.ctx = ctx;
         this.canvasWidth = width;
         this.canvasHeight = height;
         this.resetWaves();
@@ -393,14 +394,26 @@ class Terrain
         if (code === 82) { // 'r'
             this.randomType = 2;
             this.resetWaves();
+            if (!isPlaying) {
+                this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.render(this.ctx);
+            }
         }
         if (code === 84) { // 't'
             this.randomType = 1;
             this.resetWaves();
+            if (!isPlaying) {
+                this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.render(this.ctx);
+            }
         }
         if (code === 89) {// 'y'
             this.randomType = 0;
             this.resetWaves();
+            if (!isPlaying) {
+                this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.render(this.ctx);
+            }
         }
     }
 }
@@ -500,7 +513,7 @@ class MathExtension {
 class Player {
     constructor(terrain) {
         // Last fixed update positions
-        this.position = {x: 300, y: 200 }; // x: 177
+        this.position = {x: 300, y: 230 }; // x: 177
         // Interpolation
         this.iPosition = this.position;
         // Interpolation limits
@@ -533,13 +546,13 @@ class Player {
         /** The amount of momentum loss on a bounce. 0-1, 1 = no loss. */
         this.bounciness = .9;
         /** The amount of velocity lost per update. The % of friction subtracted from velocity each frame.  */
-        this.friction = .6;
+        this.friction = .5;
         /** The amount pixels allowed before the object is considered Grounded */
-        this.groundedTolerance = 1;
+        this.groundedTolerance = 3;
         /** The minimum amount of degrees required in order to bounce */
-        this.requiredBounceAngle = 30;
+        this.requiredBounceAngle = 50;
         /** The minimum amount of speed required in order to bounce */
-        this.requiredBounceMagnitude = 6;
+        this.requiredBounceMagnitude = 4;
         /** The minimum amount of speed required before it idle */
         this.requiredMagnitude = 2.5;
 
@@ -582,6 +595,8 @@ class Player {
         // Using the intersection results of the previous update.
         if (!isGrounded) {
             this.velocity.y -= gravityForce;
+            this.isGrounded = false;
+            // console.log("  airborne");
         } else {
             // Flip slopedir around since Y is flipped in the canvas.
             let slopeDir = this.floorSlopeDir;
@@ -591,7 +606,7 @@ class Player {
             const reflectionAngle = MathExtension.Angle(this.floorReflectionDir, vDir) * MathExtension.Rad2Degree();
 
             // console.log(reflectionAngle);
-            if (reflectionAngle < this.requiredBounceAngle || vMagnitude < this.requiredBounceMagnitude) {
+            if (reflectionAngle < this.requiredBounceAngle || vMagnitude < this.requiredBounceMagnitude || (this.isGrounded && slopeDir.y > 0)) {
                 // Align velocity with the surface 
                 this.velocity = {
                     x: slopeDir.x * vMagnitude,
@@ -610,6 +625,7 @@ class Player {
                     x: this.velocity.x + slopeForces.x,
                     y: this.velocity.y + slopeForces.y,
                 }
+                this.isGrounded = true;
             } else {
                 // this.velocity.y += gravity;
                 // vMagnitude += gravityForce;
@@ -618,6 +634,7 @@ class Player {
                     x: this.floorReflectionDir.x * vMagnitude * this.bounciness,
                     y: -this.floorReflectionDir.y * vMagnitude * this.bounciness,
                 };
+                this.isGrounded = false;
             }
         }
 
@@ -683,7 +700,7 @@ class Player {
         const horizontalDirection = (this.velocity.x > 0) ? 1 : -1;
         this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedPosition.x, this.waveBelow);
         let nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
-        
+
         this.iMaxY = this.predictedFloorHeight;
         this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
         this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
@@ -726,7 +743,7 @@ class Player {
             ctx.beginPath();
             ctx.strokeStyle = "green";
             ctx.moveTo(this.iPosition.x, this.iPosition.y);
-            ctx.lineTo(this.iPosition.x + this.velocity.x * 50, this.iPosition.y + -this.velocity.y * 100);
+            ctx.lineTo(this.iPosition.x + this.velocity.x * 50, this.iPosition.y + -this.velocity.y * 50);
             ctx.stroke();
 
 
