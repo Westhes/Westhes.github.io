@@ -1,8 +1,8 @@
 <footer class="{{ .Site.Params.background_color_class | default "bg-black" }} bottom-0 w-100 pa3" role="contentinfo" style="position:relative">
   <canvas id="gameWindow" width="300" height="320" style="position:absolute;bottom: 100%;left: 0%;z-index:-1"></canvas>
 
-    {{ $js := resources.Get "js/game.js" }}
-    {{ $file := $js | resources.Minify  }}
+    {{ $js := resources.Get "js/game.js" | js.Build (dict "minify" true )  }}
+    {{ $file := $js }}
     <script defer type="application/javascript" src="{{ $file.RelPermalink }}"></script>  
   
   <div class="flex justify-between">

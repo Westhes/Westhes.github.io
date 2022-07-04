@@ -57,28 +57,32 @@ class Game {
         const frameDelta = (now - this.lastFrame)/1000;
         this.lastUpdate = now;
         
-        // While loop so we can catch up if neccesary(?)
-        // Using an if statement speeds up gameplay if necessary, but gives a smoother catchup experience.
-        if (fixedDelta >= this.targetFixedUpdate)
-        {
-            // Actual fixedUpdate
-            // let fixedDeltaTime = (now - this.lastFixedUpdate) / 1000;
+        try {
+            // While loop so we can catch up if neccesary(?)
+            // Using an if statement speeds up gameplay if necessary, but gives a smoother catchup experience.
+            if (fixedDelta >= this.targetFixedUpdate)
+            {
+                // Actual fixedUpdate
+                // let fixedDeltaTime = (now - this.lastFixedUpdate) / 1000;
 
-            // In a ideal world there is no delay, but that's obviously not the case.
-            // Subtract the delay to make the next event fire ever so slightly faster.
-            this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
-            // Lets just tell the method 
-            this.fixedUpdate(this.targetFixedUpdate, now); // fixedDeltaTime
-        }
+                // In a ideal world there is no delay, but that's obviously not the case.
+                // Subtract the delay to make the next event fire ever so slightly faster.
+                this.lastFixedUpdate = now - (now - this.lastFixedUpdate - this.targetFixedUpdateMS);
+                // Lets just tell the method 
+                this.fixedUpdate(this.targetFixedUpdate, now); // fixedDeltaTime
+            }
 
-        // Update
-        this.update(delta, now);
+            // Update
+            this.update(delta, now);
 
-        // The refresh rate is less important, we can be less accurate here.
-        if (frameDelta >= this.targetFrameRate)
-        {
-            this.lastFrame = now - (now - this.lastFrame - this.targetFrameRateMS);
-            this.render();
+            // The refresh rate is less important, we can be less accurate here.
+            if (frameDelta >= this.targetFrameRate)
+            {
+                this.lastFrame = now - (now - this.lastFrame - this.targetFrameRateMS);
+                this.render();
+            }
+        } catch (err) {
+            this.isPlaying = false;
         }
         this.stopped = !isPlaying;
     }
