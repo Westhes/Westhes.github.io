@@ -8,7 +8,7 @@
         {{ $featured_video := (trim $featured_video "/" | absURL)}}
         <div class="{{ cond (eq $.Site.Language.LanguageDirection "rtl") "pl3-ns" "pr3-ns" }} mb4 mb0-ns w-100 w-40-ns">
           <a href="{{.RelPermalink}}" class="grow flex justify-center h5-ns">
-            <video muted class="preview mw-100" preload="metadata">
+            <video disableRemotePlayback muted class="preview mw-100" preload="metadata">
               <source src="{{ $featured_video }}" type="video/mp4" />
             </video>
           </a>
