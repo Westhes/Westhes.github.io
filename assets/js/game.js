@@ -7,8 +7,8 @@ class Game {
     constructor(targetFrameRate, targetFixedUpdateRate) {
         this.fps = 0;
         this.canvas = document.getElementById("gameWindow");
-        this.canvas.width = document.body.clientWidth - 30;
-        this.canvas.height = 900;
+        this.canvas.width = document.body.clientWidth;
+        this.canvas.height = 320;
         this.width = this.canvas.width;
         this.height = this.canvas.height;
         this.context = this.canvas.getContext('2d');
@@ -20,6 +20,8 @@ class Game {
         this.targetFixedUpdateMS = 1000 / targetFixedUpdateRate;
         this.targetFrameRate = 1 / targetFrameRate;
         this.targetFrameRateMS = 1000 / targetFrameRate;
+
+        this.stopped = !isPlaying;
 
         this.gameObjects = [];
 
@@ -33,12 +35,11 @@ class Game {
     }
 
     startLoop() {
-        isPlaying = true;
         let now = performance.now();
         this.lastUpdate = now;
         this.lastFixedUpdate = now - this.targetFixedUpdateMS;
         this.lastFrame = now - this.targetFrameRateMS;
-        console.log(this);
+        // console.log(this);
         this.updateMethod(this.gameLoop.bind(this));
     }
 
@@ -46,6 +47,9 @@ class Game {
         this.updateMethod(this.gameLoop.bind(this));
         if (!isPlaying) {
             return;
+        } else if (this.stopped) { // Ensure the times are setup correctly.
+            this.stopped = false;
+            this.startLoop();
         }
         const now = performance.now();
         const delta = (now - this.lastUpdate)/1000;
@@ -76,13 +80,16 @@ class Game {
             this.lastFrame = now - (now - this.lastFrame - this.targetFrameRateMS);
             this.render();
         }
+        this.stopped = !isPlaying;
     }
 
     onWindowResize() {
-        // Handle resize logic here
-        //console.log(document.body.clientWidth, document.body.clientHeight);
+        this.canvas.width = document.body.clientWidth;
+        this.width = this.canvas.width;
+
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.gameObjects.forEach(gameObject => {
-            gameObject.onCanvasResize(this.width, this.height);
+            gameObject.onCanvasResize(this.width, this.height, this.context);
         })
     }
 
@@ -125,7 +132,7 @@ class Game {
 
     addGameobject(newGameObject) {
         this.gameObjects.push(newGameObject);
-        newGameObject.onCanvasResize(this.width, this.height);
+        newGameObject.onCanvasResize(this.width, this.height, this.context);
     }
 
     static GetUpdateMethod() {
@@ -176,15 +183,15 @@ class FPSCounter
         ctx.fillText(this.renderedFramesPerSecond + " Frame rate", this.x, this.y + 10);
     }
 
-    onCanvasResize(width, height) {}
+    onCanvasResize(width, height, ctx) {}
 }
 
 class Terrain
 {
-    static MinWaveWidth = 175;
-    static MaxWaveWidth = 300;
-    static MinWaveHeight = 100;
-    static MaxWaveHeight = 200;
+    static getMinWaveWidth() { return 175; };
+    static getMaxWaveWidth() { return 300; };
+    static getMinWaveHeight() { return 100; };
+    static getMaxWaveHeight() { return 200; };
     constructor() {
         this.x = 0;
         this.y = 150;
@@ -195,15 +202,14 @@ class Terrain
 
         this.waves = [];
         this.furthestX = 0;
+        this.randomType = 0;
+
+        window.addEventListener('keydown', this.keyboardInput.bind(this), false);
     }
 
     update(deltaTime, now) {}
     fixedUpdate(fixedDeltaTime, now){}
     render(ctx) {
-        if (this.hasSave) {
-            ctx.restore();
-            return;
-        }
         ctx.beginPath();
         ctx.moveTo(0, this.canvasHeight);
         for (let i = 0; i < this.waves.length; i++) {
@@ -222,22 +228,31 @@ class Terrain
         ctx.fill();
     }
 
-    onCanvasResize(width, height) {
+    onCanvasResize(width, height, ctx) {
+        if (this.canvasHeight === width && this.canvasHeight === height) { 
+            return;
+        }
         this.canvasWidth = width;
         this.canvasHeight = height;
-        this.expandWaves();
+        this.resetWaves();
+        if (!isPlaying) {
+            this.render(ctx);
+        }
     }
 
-    expandWaves() {
-        let index = this.waves.length;
+    resetWaves() {
+        // console.log("resetCanvas");
+        this.waves.length = 0;
+        this.furthestX = 0;
+        let index = 0;
         if (index === 0) {
             this.waves.push({
                 previous: null,
                 next: null,
                 x0: 0,
-                y0: this.canvasHeight - 200,
-                x1: Terrain.MinWaveWidth,
-                y1: this.canvasHeight - Terrain.MinWaveHeight,
+                y0: this.canvasHeight - Terrain.getMinWaveHeight() - 10,
+                x1: Terrain.getMinWaveWidth(),
+                y1: this.canvasHeight - 10,
             });
             index++;
         }
@@ -248,11 +263,11 @@ class Terrain
             if (isCurve) {
                 const earlierElement = this.waves[this.waves.length -2];
                 const isHill = earlierElement.y0 < earlierElement.y1;
-                waveLine = Terrain.CurveLine(prevElement, isHill);
+                waveLine = Terrain.curveLine(prevElement, isHill, this.randomType);
                 // this.waves.push(waveLine);
                 // waveLine = Terrain.Mirror(waveLine);
             } else {
-                waveLine = Terrain.StraightLine(prevElement);
+                waveLine = Terrain.straightLine(prevElement);
             }
             if (waveLine.y1 > this.canvasHeight) waveLine.y1 = this.canvasHeight;
             prevElement.next = waveLine;
@@ -303,7 +318,7 @@ class Terrain
     }
 
     static waveIntersection(position, predictedDirection, wave) {
-        const waveSegments = Terrain.SubdivideWave(wave);
+        const waveSegments = Terrain.subdivideWave(wave);
         for (let i = 0; i < waveSegments.length -1; i++) {
             const element = waveSegments[i];
             const intersection = MathExtension.LineIntersection(position, predictedDirection, element, waveSegments[i+1]);
@@ -319,11 +334,10 @@ class Terrain
      * Subdivides the wave into 5 pieces.
      * @param {*} wave the wave to subdivide
      */
-    static SubdivideWave(wave) {
+    static subdivideWave(wave) {
         const wavePoints = [];
         // 0,  1,2,3,4,5, 6,
         for (let index = 0; index < 6; index++) {
-            // const element = array[index];
             let x = MathExtension.Lerp(wave.x0, wave.x1, (index / (6 - 1)));
             // wavePoints
             wavePoints.push({
@@ -340,23 +354,51 @@ class Terrain
         return MathExtension.Lerp(wave.y0, wave.y1, MathExtension.SmoothStep(wave.x0, wave.x1, x));
     }
 
-    static StraightLine(prevLine) {
+    static straightLine(prevLine) {
         let x = prevLine.x1;
         let y = prevLine.y1;
         return {previous: null, next: null, x0: x, y0: y, x1: x + 5, y1: y};
     }
 
-    static CurveLine(prevCurve, isHill) {
+    static curveLine(prevCurve, isHill, type) {
         const x0 = prevCurve.x1;
-        const x1 = x0 + MathExtension.Lerp(Terrain.MinWaveWidth, Terrain.MaxWaveWidth, MathExtension.Random01(x0));
+        const x1 = x0 + MathExtension.Lerp(Terrain.getMinWaveWidth(), Terrain.getMaxWaveWidth(), this.RandomMethod(type)(x0)); //MathExtension.Random01(x0));
         const y0 = prevCurve.y1;
         let y1 = (isHill) 
-            ? y0 - MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, MathExtension.Random01(x1))
-            : y0 + MathExtension.Lerp(Terrain.MinWaveHeight, Terrain.MaxWaveHeight, MathExtension.Random01(x1));
+            ? y0 - MathExtension.Lerp(Terrain.getMinWaveHeight(), Terrain.getMaxWaveHeight(), this.RandomMethod(type)(x1))
+            : y0 + MathExtension.Lerp(Terrain.getMinWaveHeight(), Terrain.getMaxWaveHeight(), this.RandomMethod(type)(x1));
         return {previous: null, next: null, x0, y0, x1, y1};
     }
 
-    static Mirror(prevCurve) { return { x0: prevCurve.x1, y0: prevCurve.y1, x1: prevCurve.x1 + prevCurve.x1 - prevCurve.x0, y1: prevCurve.y0 }; }
+    static mirror(prevCurve) { return { x0: prevCurve.x1, y0: prevCurve.y1, x1: prevCurve.x1 + prevCurve.x1 - prevCurve.x0, y1: prevCurve.y0 }; }
+
+    static RandomMethod(type) {
+        switch (type) {
+            // Not random
+            case 0: return function(v) { return 0.0; };
+            // Semi random
+            case 1: return function(v) {return MathExtension.Random01(v); }
+            // Random
+            case 2: return function(v) { return Math.random(); };
+            default: return function(v) { return 0.0; };
+        }
+    }
+
+    keyboardInput(key) {
+        const code = key.keyCode;
+        if (code === 82) { // 'r'
+            this.randomType = 2;
+            this.resetWaves();
+        }
+        if (code === 84) { // 't'
+            this.randomType = 1;
+            this.resetWaves();
+        }
+        if (code === 89) {// 'y'
+            this.randomType = 0;
+            this.resetWaves();
+        }
+    }
 }
 
 class MathExtension {
@@ -410,7 +452,7 @@ class MathExtension {
     /**
      * Multiply Rad by this value in order to get degrees.
      */
-    static Rad2Degree = 180/Math.PI;
+    static Rad2Degree() { return 180/Math.PI };
 
     /**
      * Calculates the angle between two vectors.
@@ -458,7 +500,7 @@ class Player {
         // Interpolation
         this.iPosition = this.position;
         // Interpolation limits
-        this.iMaxX = terrain.canvasWidth;
+        this.iMaxX = terrain.canvasWidth -1;
         this.iMaxY = 999999;
         this.iMinX = 0;
         this.iMinY = -100;
@@ -485,7 +527,7 @@ class Player {
         // Variables
         this.mass = 25;
         /** The amount of momentum loss on a bounce. 0-1, 1 = no loss. */
-        this.bounciness = .8;
+        this.bounciness = .9;
         /** The amount of velocity lost per update. The % of friction subtracted from velocity each frame.  */
         this.friction = .6;
         /** The amount pixels allowed before the object is considered Grounded */
@@ -497,10 +539,8 @@ class Player {
         /** The minimum amount of speed required before it idle */
         this.requiredMagnitude = 2.5;
 
-        // this.floor
-        window.addEventListener('keydown', this.input.bind(this), false);
-
-        this.frame = 0;
+        window.addEventListener('mousedown', this.mouseInput.bind(this), false);
+        window.addEventListener('touchstart', this.mouseInput.bind(this), false);
     }
 
     update(deltaTime, now) {
@@ -544,9 +584,9 @@ class Player {
             slopeDir.y = -slopeDir.y;
             const modifier = (slopeDir.y > 0) ? -1 : 1;
             const vDir = MathExtension.Normalize(this.velocity.x, -this.velocity.y);
-            const reflectionAngle = MathExtension.Angle(this.floorReflectionDir, vDir) * MathExtension.Rad2Degree;
+            const reflectionAngle = MathExtension.Angle(this.floorReflectionDir, vDir) * MathExtension.Rad2Degree();
 
-            console.log(reflectionAngle);
+            // console.log(reflectionAngle);
             if (reflectionAngle < this.requiredBounceAngle || vMagnitude < this.requiredBounceMagnitude) {
                 // Align velocity with the surface 
                 this.velocity = {
@@ -569,7 +609,7 @@ class Player {
             } else {
                 // this.velocity.y += gravity;
                 // vMagnitude += gravityForce;
-                console.log("Bouncing...");
+                // console.log("Bouncing...");
                 this.velocity = {
                     x: this.floorReflectionDir.x * vMagnitude * this.bounciness,
                     y: -this.floorReflectionDir.y * vMagnitude * this.bounciness,
@@ -587,8 +627,8 @@ class Player {
         this.velocity.y -= drag.y; //- 1 * (1/this.fixedDeltaTime));
         vMagnitude = MathExtension.Magnitude(this.velocity);
 
-        if (isGrounded && vMagnitude < 2.5 && isHorizontalSurface) {
-            console.log("Stopped velocity!");
+        if (isGrounded && vMagnitude < this.requiredMagnitude && isHorizontalSurface) {
+            // console.log("Stopped velocity!");
             this.velocity = {
                 x: 0,
                 y: 0,
@@ -596,7 +636,7 @@ class Player {
             isPlaying = false;
         }
         // console.log("Velocity gained: +", addedVelocity, " current ", this.velocity);
-        console.log("Velocity mag: ", vMagnitude, " gravity:", gravityForce);
+        // console.log("Velocity mag: ", vMagnitude, " gravity:", gravityForce);
 
 
         // Corner bounce
@@ -625,7 +665,7 @@ class Player {
         
         // Update the predicted results with more accurate data.
         if (this.waveIntersectionResult.intersect) {
-            console.log("Intersection!");
+            // console.log("Intersection!");
             // isPlaying = false;
             const yt = MathExtension.Unlerp(this.position.y, this.predictedPosition.y, this.waveIntersectionResult.y);
             this.predictedPosition = this.waveIntersectionResult.position;
@@ -640,9 +680,6 @@ class Player {
         this.predictedFloorHeight = Terrain.getWaveHeightAtPosition(this.predictedPosition.x, this.waveBelow);
         let nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x + horizontalDirection, this.waveBelow);
         
-        // Re-enabled this!!
-        // if (nextPredictedFloor > this.predictedFloorHeight && this.velocity.x === 0)
-            // nextPredictedFloor = Terrain.getWaveHeightAtPosition(this.predictedPosition.x - horizontalDirection, this.waveBelow);
         this.iMaxY = this.predictedFloorHeight;
         this.floorSlopeDir = MathExtension.Normalize(horizontalDirection, nextPredictedFloor - this.predictedFloorHeight);
         this.floorNormal = MathExtension.SurfaceNormal(this.floorSlopeDir);
@@ -749,49 +786,47 @@ class Player {
         ctx.lineWidth = 1;
     }
 
-    onCanvasResize(width, height) {}
+    onCanvasResize(width, height, ctx) {
+        this.iMaxX = width;
+    }
 
-    input(key) {
-        const keyCode = key.keyCode;
-        switch(keyCode) {
-            case 83: // 'S' pressed
-                this.velocity.y = 2;
-                break;
-            case 68: // 'D' pressed
-                this.velocity.x += 100;
-                break;
-
-            case 37: // Left pressed
-                break;
-            case 38: // Up pressed
-                break
-            case 39: // Right pressed
-                break;
-            case 40: // Down pressed
-                break;
-        }
+    mouseInput() {
+        this.position = mousePosition;
+        this.iPosition = mousePosition;
+        this.velocity = { x:0, y:0 };
+        isPlaying = true;
     }
 }
 
 let mousePosition = {x:0, y:0};
 function getMousePos(e) {
-    let canvas = document.getElementById("gameWindow");
-    var rect = canvas.getBoundingClientRect();
+    const canvas = document.getElementById("gameWindow");
+    const rect = canvas.getBoundingClientRect();
     mousePosition = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
     };
 }
 
+function getFingerPos(e) {
+    const canvas = document.getElementById("gameWindow");
+    const rect = canvas.getBoundingClientRect();
+    mousePosition = {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top,
+    };
+}
+
 function startGame() {
     const game = new Game(144, 20);
     const terrain = new Terrain();
-    game.addGameobject(new FPSCounter(game));
+    // game.addGameobject(new FPSCounter(game));
     game.addGameobject(terrain);
     game.addGameobject(new Player(terrain));
     
     onmousemove = getMousePos;
+    ontouchmove = getFingerPos;
 }
 const Debug = false;
-let isPlaying = true;
+let isPlaying = false;
 startGame();

@@ -1,5 +1,11 @@
-<footer class="{{ .Site.Params.background_color_class | default "bg-black" }} bottom-0 w-100 pa3" role="contentinfo">
-    <div class="flex justify-between">
+<footer class="{{ .Site.Params.background_color_class | default "bg-black" }} bottom-0 w-100 pa3" role="contentinfo" style="position:relative">
+  <canvas id="gameWindow" width="300" height="320" style="position:absolute;bottom: 100%;left: 0%;z-index:-1"></canvas>
+
+    {{ $js := resources.Get "js/game.js" }}
+    {{ $file := $js | resources.Minify  }}
+    <script defer type="application/javascript" src="{{ $file.RelPermalink }}"></script>  
+  
+  <div class="flex justify-between">
     <a class="f4 fw4 hover-white no-underline white-70 dn dib-ns pv2 ph3" href="{{ .Site.BaseURL }}" >
       &copy; {{ with .Site.Copyright | default .Site.Title }} {{ . | safeHTML }} {{ now.Format "2006"}} {{ end }}
     </a>
