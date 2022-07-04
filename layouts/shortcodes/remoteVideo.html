@@ -1,4 +1,4 @@
 <!-- Args can contain arguments for attributes such as loop, autoplay, muted -->
-<video controls preload="false" {{ .Get "args" }} name="media" style="{{ .Get "style" | safeCSS }}">
+<video disableRemotePlayback controls preload="false" {{ .Get "args" }} name="media" style="{{ .Get "style" | safeCSS }}">
     <source src="{{ .Get "src" }}" type="video/mp4">
 </video>
